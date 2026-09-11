@@ -275,8 +275,8 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant Adm as 管理者級整備士(PC, D-05)
-    participant FE as FE(threshold.vue)
+    participant Adm as 管理者級整備士(D-02)
+    participant FE as FE(list.vue)
     participant API as POST /api/deferred-sync(API層)
     participant Sync as deferredSync.ts(ロジック層)
     participant Lock as lock.ts(ロジック層)
@@ -393,3 +393,67 @@ sequenceDiagram
 - パスワード更新（本人・管理者とも）は `AllowList` の単一行の 1〜2 セル更新で、ログイン照合キー（email）は変えないため `locks/inventory.lock` は取得しない（[overview.md](overview.md) 6.1）。
 - ユーザ行の追加・削除・退職フラグ変更はスプレッドシートの直接編集で行う（要件10章）。この画面では扱わない。
 - ロジックは `src/server/utils/users.ts`。`session.ts` のログイン照合とハッシュ生成ロジックを共用する。
+
+### 2.8 通知先設定シーケンス（D-10、管理者のみ、要件 3-9・FR-09 該当）
+
+D-10（ユーザ情報画面）に配置するが、ドメイン上は在庫通知管理（[overview.md](overview.md) 3章）に属するため、ロジック層は 2.7 の `users.ts` ではなく `alert.ts` を用いる。
+
+```mermaid
+sequenceDiagram
+    participant U as 管理者級整備士（D-10）
+    participant FE as FE(user_info.vue)
+    participant API as API層(server/api)
+    participant Logic as alert.ts(ロジック層)
+    participant Lock as lock.ts(ロジック層)
+    participant DAO as sheets.ts(DAO)
+    participant SS as スプレッドシート(NotificationTargets / AllowList)
+
+    Note over FE: D-10 の通知先設定欄は管理者のみ表示（useAuth の isAdmin）
+
+    U->>FE: D-10 の通知先設定欄を開く
+    FE->>API: GET /api/notification-targets（x-session-id）
+    API->>API: validateSession → AllowList 再解決で管理者判定
+    alt 非管理者
+        API-->>FE: status:ERROR, code:PERMISSION_DENIED（HTTP 403）
+    else 管理者
+        API->>Logic: 一覧取得を委譲
+        Logic->>DAO: NotificationTargets 全行取得
+        DAO->>SS: 読み取り
+        Logic-->>API: targetId / email
+        API-->>FE: status:OK, data
+        FE-->>U: 通知先メールアドレス一覧を表示
+
+        U->>FE: メールアドレス入力 → 追加
+        FE->>API: POST /api/notification-targets { email }（x-session-id）
+        API->>API: 管理者判定（再チェック）／入力検証（メール形式・≤254・重複不可）
+        API->>Logic: 追加を委譲
+        Logic->>Lock: acquireLock("locks/inventory.lock")
+        Lock-->>Logic: ロック取得
+        Logic->>Logic: targetId 採番（`TAR-` の最大連番+1、[database.md](database.md) 冒頭）
+        Logic->>DAO: NotificationTargets へ新規行追加
+        DAO->>SS: 書き込み
+        Logic->>Lock: releaseLock
+        API-->>FE: status:OK, data（targetId, email）
+        FE-->>U: 一覧を更新表示
+
+        U->>FE: 対象アドレスの削除を選択
+        FE->>API: DELETE /api/notification-targets { targetId }（x-session-id）
+        API->>API: 管理者判定（再チェック）
+        alt AllowList.targetId から参照中
+            API-->>FE: status:ERROR, code:INVALID_INPUT（管理者に紐付く通知先は削除不可）
+        else 未参照
+            API->>Logic: 削除を委譲
+            Logic->>Lock: acquireLock("locks/inventory.lock")
+            Lock-->>Logic: ロック取得
+            Logic->>DAO: NotificationTargets 該当行を削除
+            DAO->>SS: 書き込み
+            Logic->>Lock: releaseLock
+            API-->>FE: status:OK
+            FE-->>U: 一覧を更新表示
+        end
+    end
+```
+
+- `POST /api/notification-targets` は `locks/inventory.lock` を取得してから `targetId`（`TAR-` の3桁連番）を採番する（[overview.md](overview.md) 6.1、[database.md](database.md) 冒頭「ID の採番規則」）。
+- `DELETE /api/notification-targets` は、削除対象の `targetId` が `AllowList.targetId`（D列）から参照されている場合は `INVALID_INPUT` で拒否する（管理者の管理者判定と紐付くため、[overview.md](overview.md) 4.6）。
+- ロック取得・解放のパラメータ（リトライ・タイムアウト・スタックロック対策）は 2.3 / [overview.md](overview.md) 6.1 と共通。

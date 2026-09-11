@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// D-10: ユーザ情報画面（FR-13/3-10）
+// D-10: ユーザ情報画面（FR-13/3-10、管理者のみ通知先設定 3-9/FR-09）
 definePageMeta({ middleware: 'auth' })
 
 interface UserSummary {
@@ -8,6 +8,10 @@ interface UserSummary {
   isAdmin: boolean
   retiredFlag: boolean
   updatedAt: string
+}
+interface NotificationTarget {
+  targetId: string
+  email: string
 }
 
 const { apiFetch } = useApi()
@@ -53,8 +57,25 @@ const loadUsers = async () => {
   }
 }
 
+// 管理者: 通知先設定
+const targets = ref<NotificationTarget[]>([])
+const newTargetEmail = ref('')
+const targetError = ref('')
+
+const loadTargets = async () => {
+  targetError.value = ''
+  try {
+    targets.value = await apiFetch<NotificationTarget[]>('/api/notification-targets')
+  } catch (e) {
+    targetError.value = e instanceof Error ? e.message : '取得に失敗しました'
+  }
+}
+
 onMounted(() => {
-  if (isAdmin.value) loadUsers()
+  if (isAdmin.value) {
+    loadUsers()
+    loadTargets()
+  }
 })
 
 const handleResetPassword = async () => {
@@ -70,6 +91,27 @@ const handleResetPassword = async () => {
     resetPasswordConfirm.value = ''
   } catch (e) {
     resetError.value = e instanceof Error ? e.message : 'リセットに失敗しました'
+  }
+}
+
+const handleAddTarget = async () => {
+  targetError.value = ''
+  try {
+    await apiFetch('/api/notification-targets', { method: 'POST', body: { email: newTargetEmail.value } })
+    newTargetEmail.value = ''
+    await loadTargets()
+  } catch (e) {
+    targetError.value = e instanceof Error ? e.message : '追加に失敗しました'
+  }
+}
+
+const handleRemoveTarget = async (targetId: string) => {
+  targetError.value = ''
+  try {
+    await apiFetch('/api/notification-targets', { method: 'DELETE', body: { targetId } })
+    await loadTargets()
+  } catch (e) {
+    targetError.value = e instanceof Error ? e.message : '削除に失敗しました'
   }
 }
 </script>
@@ -119,5 +161,16 @@ const handleResetPassword = async () => {
     <button :disabled="!resetTargetAllowId" @click="handleResetPassword">リセット</button>
     <p v-if="resetMessage" style="color: green">{{ resetMessage }}</p>
     <p v-if="resetError" style="color: red">{{ resetError }}</p>
+
+    <h2>通知先設定</h2>
+    <ul>
+      <li v-for="target in targets" :key="target.targetId">
+        {{ target.email }}
+        <button @click="handleRemoveTarget(target.targetId)">削除</button>
+      </li>
+    </ul>
+    <input v-model="newTargetEmail" type="email" placeholder="通知先メールアドレス" />
+    <button @click="handleAddTarget">追加</button>
+    <p v-if="targetError" style="color: red">{{ targetError }}</p>
   </section>
 </template>
