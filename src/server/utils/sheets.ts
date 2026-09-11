@@ -1,6 +1,7 @@
 // データアクセス層: Googleスプレッドシートの読み書き（overview.md 3.1 / database.md）。
 // ロジック層・API層はここを経由し、直接 googleapis を呼ばない。
 import { google, sheets_v4 } from 'googleapis'
+import { createGoogleAuth } from './googleAuth'
 
 export interface InventoryRow {
   itemId: string
@@ -54,15 +55,7 @@ let sheetsClient: sheets_v4.Sheets | null = null
 export async function getSheetsClient() {
   if (sheetsClient) return sheetsClient
 
-  const config = useRuntimeConfig()
-  const auth = new google.auth.GoogleAuth({
-    credentials: {
-      client_email: config.googleServiceAccountEmail,
-      private_key: config.googlePrivateKey.replace(/\\n/g, '\n'),
-    },
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-  })
-
+  const auth = createGoogleAuth(['https://www.googleapis.com/auth/spreadsheets'])
   sheetsClient = google.sheets({ version: 'v4', auth })
   return sheetsClient
 }

@@ -3,21 +3,14 @@
 // verification/01_gcs_bucket.mjs で実証済みの googleapis の storage v1 クライアントをそのまま用いる
 // （既に依存に含まれる googleapis を再利用し、@google-cloud/storage は追加しない）。
 import { google, storage_v1 } from 'googleapis'
+import { createGoogleAuth } from './googleAuth'
 
 let storageClient: storage_v1.Storage | null = null
 
 async function getStorageClient() {
   if (storageClient) return storageClient
 
-  const config = useRuntimeConfig()
-  const auth = new google.auth.GoogleAuth({
-    credentials: {
-      client_email: config.googleServiceAccountEmail,
-      private_key: config.googlePrivateKey.replace(/\\n/g, '\n'),
-    },
-    scopes: ['https://www.googleapis.com/auth/devstorage.read_write'],
-  })
-
+  const auth = createGoogleAuth(['https://www.googleapis.com/auth/devstorage.read_write'])
   storageClient = google.storage({ version: 'v1', auth })
   return storageClient
 }
