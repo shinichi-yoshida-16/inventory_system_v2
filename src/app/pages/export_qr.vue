@@ -68,10 +68,10 @@ const handlePrint = () => window.print()
 </script>
 
 <template>
-  <h1>QR発行</h1>
-  <button @click="navigateTo('/dashboard')">ダッシュボードに戻る</button>
+  <h1 class="no-print">QR発行</h1>
+  <button class="no-print" @click="navigateTo('/dashboard')">ダッシュボードに戻る</button>
 
-  <section>
+  <section class="no-print">
     <h2>新規品目登録してQR発行</h2>
     <p>品目名: <input v-model="newItemName" /></p>
     <p>閾値: <input v-model.number="newThreshold" type="number" min="0" /></p>
@@ -80,7 +80,7 @@ const handlePrint = () => window.print()
     <p v-if="registerError" style="color: red">{{ registerError }}</p>
   </section>
 
-  <section>
+  <section class="no-print">
     <h2>既存品目のQR再発行</h2>
     <select v-model="selectedItemId">
       <option value="" disabled>品目を選択してください</option>
@@ -92,13 +92,13 @@ const handlePrint = () => window.print()
   </section>
 
   <section v-if="qrDataUrl">
-    <h2>発行結果</h2>
+    <h2 class="no-print">発行結果</h2>
     <div class="qr-label">
       <img :src="qrDataUrl" alt="QRコード" />
       <p>{{ qrItemId }}</p>
       <p>{{ qrItemName }}</p>
     </div>
-    <button @click="handlePrint">印刷</button>
+    <button class="no-print" @click="handlePrint">印刷</button>
   </section>
 </template>
 
@@ -110,11 +110,32 @@ const handlePrint = () => window.print()
   text-align: center;
 }
 @media print {
-  h1, section h2, section button, section input, section select, section p:not(.qr-label p) {
-    display: none;
+  @page {
+    size: 91mm 55mm;
+    margin: 0;
+  }
+  .no-print {
+    display: none !important;
   }
   .qr-label {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    margin: 0;
+    padding: 0;
     border: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  .qr-label img {
+    max-width: 70%;
+    height: auto;
+  }
+  .qr-label p {
+    margin: 2px 0;
   }
 }
 </style>

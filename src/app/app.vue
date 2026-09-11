@@ -52,4 +52,12 @@ button {
   font-size: 24px;
   z-index: 1000;
 }
+
+@media print {
+  .header,
+  footer,
+  .loading-overlay {
+    display: none !important;
+  }
+}
 </style>
