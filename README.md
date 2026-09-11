@@ -1,0 +1,2 @@
+# inventory_system_v2
+inventory_systemのリファクタリング
