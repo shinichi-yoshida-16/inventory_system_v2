@@ -7,12 +7,13 @@ export default defineNuxtConfig({
     typeCheck: true,   // ビルド時に型チェックを実行
   },
   runtimeConfig: {
-    // .env の GOOGLE_* / GCS_ / GMAIL_ を読み込む（NUXT_ プレフィックスでも上書き可）
-    googleServiceAccountEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL ?? '',
-    googlePrivateKey: process.env.GOOGLE_PRIVATE_KEY ?? '',
-    googleSpreadsheetId: process.env.GOOGLE_SPREADSHEET_ID ?? '',
-    gcsBucket: process.env.GCS_BUCKET ?? '',
-    gmailSender: process.env.GMAIL_SENDER ?? '',
-    gmailAppPassword: process.env.GMAIL_APP_PASSWORD ?? '',
+    // 値はビルド時ではなくコンテナ起動時に NUXT_ プレフィックス付き環境変数（例: NUXT_GOOGLE_SERVICE_ACCOUNT_EMAIL）で上書きする。
+    // process.env を直接読むとビルド時点の値が焼き込まれ、Cloud Run側の環境変数が反映されないため使わない。
+    googleServiceAccountEmail: '',
+    googlePrivateKey: '',
+    googleSpreadsheetId: '',
+    gcsBucket: '',
+    gmailSender: '',
+    gmailAppPassword: '',
   },
 })

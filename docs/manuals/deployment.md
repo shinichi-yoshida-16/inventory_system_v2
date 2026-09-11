@@ -90,7 +90,7 @@ gcloud storage buckets update gs://$BUCKET --lifecycle-file=/tmp/lifecycle.json
 
 1. `gulliver_database` に4シート（`InventoryMaster` / `TransactionLog` / `NotificationTargets` / `AllowList`）を作成し、各シート1行目に [database.md](../architecture/database.md) の列名でヘッダー行を置く。
 2. スプレッドシートの「共有」で、**実行 SA のメールアドレス（`inventory-run@…`）を編集者**として追加する。
-3. スプレッドシートID（URL の `/d/` と `/edit` の間）を控える → `GOOGLE_SPREADSHEET_ID`。
+3. スプレッドシートID（URL の `/d/` と `/edit` の間）を控える → `NUXT_GOOGLE_SPREADSHEET_ID`。
 
 ### 3.5 通知用 Gmail のアプリパスワード（FR-09 / 技術検証 検証3）
 
@@ -106,7 +106,7 @@ gcloud secrets add-iam-policy-binding gmail-app-password \
   --member="serviceAccount:$RUN_SA" --role="roles/secretmanager.secretAccessor"
 ```
 
-送信元アドレスは環境変数 `GMAIL_SENDER` で渡す。送信は `nodemailer` で `smtp.gmail.com:465`（`secure: true`）に対して行う。
+送信元アドレスは環境変数 `NUXT_GMAIL_SENDER` で渡す。送信は `nodemailer` で `smtp.gmail.com:465`（`secure: true`）に対して行う。
 
 ---
 
@@ -126,15 +126,20 @@ gcloud secrets add-iam-policy-binding gmail-app-password \
 
 ### 4.2 環境変数 / `runtimeConfig` マッピング
 
-| 変数 | 取得元 | 用途 |
-|---|---|---|
-| `GOOGLE_SPREADSHEET_ID` | 環境変数 | DB スプレッドシートID |
-| `GCS_BUCKET` | 環境変数 | 状態バケット名 |
-| `GMAIL_SENDER` | 環境変数 | 通知メールの送信元アドレス |
-| `GMAIL_APP_PASSWORD` | Secret Manager | Gmail SMTP 送信用アプリパスワード |
-| Sheets / GCS の認証 | 実行 SA のアタッチ（ADC）で鍵ファイル不要 | SA鍵を使う場合は Secret Manager 経由で `GOOGLE_SERVICE_ACCOUNT_EMAIL` / `GOOGLE_PRIVATE_KEY` を渡す（[overview.md](../architecture/overview.md) 2.2）。ローカル開発は 7章 |
+`runtimeConfig` の値は `nuxt build` 時点（Cloud Buildのビルドステップ内）に確定するのではなく、**コンテナ起動時に `NUXT_` プレフィックス付き環境変数で上書きする**方式を取っている（[nuxt.config.ts](../../src/nuxt.config.ts)）。`nuxt.config.ts` 内で `process.env.X` を直接読んでデフォルト値を組み立てると、ビルド時点の値（＝多くの場合未設定の空文字）が成果物に焼き込まれ、Cloud Run側の環境変数が反映されない不具合になるため行わない。
 
-すべて `nuxt.config.ts` の `runtimeConfig` で読み込む（[overview.md](../architecture/overview.md) 2.2）。
+**Cloud Runに設定する環境変数名は必ず `NUXT_` プレフィックスを付けること。**
+
+| 環境変数（Cloud Run） | `runtimeConfig` キー | 取得元 | 用途 |
+|---|---|---|---|
+| `NUXT_GOOGLE_SERVICE_ACCOUNT_EMAIL` | `googleServiceAccountEmail` | 環境変数 | Sheets認証用SAのメールアドレス |
+| `NUXT_GOOGLE_PRIVATE_KEY` | `googlePrivateKey` | Secret Manager | Sheets認証用SAの秘密鍵 |
+| `NUXT_GOOGLE_SPREADSHEET_ID` | `googleSpreadsheetId` | 環境変数 | DB スプレッドシートID |
+| `NUXT_GCS_BUCKET` | `gcsBucket` | 環境変数 | 状態バケット名 |
+| `NUXT_GMAIL_SENDER` | `gmailSender` | 環境変数 | 通知メールの送信元アドレス |
+| `NUXT_GMAIL_APP_PASSWORD` | `gmailAppPassword` | Secret Manager | Gmail SMTP 送信用アプリパスワード |
+
+Sheets認証は現状ADC（実行SAのアタッチ）ではなく、上記のSAキー（`client_email` / `private_key`）を明示的に渡す実装になっている（[sheets.ts](../../src/server/utils/sheets.ts) `getSheetsClient()`）。ローカル開発は7章。
 
 ### 4.3 デプロイコマンド
 
@@ -148,8 +153,8 @@ gcloud run deploy inventory-system \
   --concurrency=20 \
   --cpu=1 --memory=512Mi \
   --allow-unauthenticated \
-  --set-env-vars=GOOGLE_SPREADSHEET_ID=xxxx,GCS_BUCKET=$BUCKET,GMAIL_SENDER=notify@example.com \
-  --set-secrets=GMAIL_APP_PASSWORD=gmail-app-password:latest
+  --set-env-vars=NUXT_GOOGLE_SERVICE_ACCOUNT_EMAIL=xxxx,NUXT_GOOGLE_SPREADSHEET_ID=xxxx,NUXT_GCS_BUCKET=$BUCKET,NUXT_GMAIL_SENDER=notify@example.com \
+  --set-secrets=NUXT_GOOGLE_PRIVATE_KEY=google-private-key:latest,NUXT_GMAIL_APP_PASSWORD=gmail-app-password:latest
 ```
 
 - `--max-instances=1` は**必須**（排他制御の多重防御。[overview.md](../architecture/overview.md) 6.1）。
@@ -184,7 +189,7 @@ gcloud run deploy inventory-system \
 
 ## 7. ローカル開発環境
 
-- `src/.env` に `GOOGLE_SPREADSHEET_ID` / `GOOGLE_SERVICE_ACCOUNT_EMAIL` / `GOOGLE_PRIVATE_KEY`（検証用 SA 鍵）/ `GCS_BUCKET` / `GMAIL_*` を設定（`.env` はリポジトリに含めない）。
+- `src/.env` に `NUXT_GOOGLE_SPREADSHEET_ID` / `NUXT_GOOGLE_SERVICE_ACCOUNT_EMAIL` / `NUXT_GOOGLE_PRIVATE_KEY`（検証用 SA 鍵）/ `NUXT_GCS_BUCKET` / `NUXT_GMAIL_*` を設定（`.env` はリポジトリに含めない）。`NUXT_` プレフィックスを付けないと `runtimeConfig` に反映されない（4.2参照）。
 - ローカルからは検証用 SA 鍵で Sheets / GCS にアクセス。GCS は本番と同じバケット、または開発用に別バケットを作成。
 - `npm run dev` で起動。カメラ機能は `localhost`（セキュアコンテキスト扱い）で動作する。
 
