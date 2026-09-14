@@ -47,7 +47,7 @@ graph TB
     API --> LOGIC
     LOGIC --> DAO
     DAO -->|googleapis| SS
-    DAO -->|＠google-cloud/storage| GCS
+    DAO -->|googleapis（storage v1）| GCS
     LOGIC -->|アラート送信| GMAIL
     run -.-> SM
 ```
@@ -84,8 +84,8 @@ inventory_system_2/                プロジェクトルート
     │   ├── composables/
     │   │   └── useAuth.ts           ログインユーザ／セッションIDの保持（状態管理層）
     │   ├── utils/
-    │   │   ├── itemId.ts           読み取りコードの itemId 正規化（QR / JAN / GS1。4.5。予定）
-    │   │   └── device.ts           UA による端末判定（スマホ / PC。導線出し分け。予定）
+    │   │   ├── itemId.ts           読み取りコードの itemId 正規化（QR / JAN / GS1。4.5）
+    │   │   └── device.ts           UA による端末判定（スマホ / PC。導線出し分け）
     │   └── middleware/
     │       └── auth.ts             未ログイン時に D-00 へリダイレクト
     ├── server/                      バックエンド（Nitro）
@@ -113,14 +113,14 @@ inventory_system_2/                プロジェクトルート
     │   │   └── deferred-sync.post.ts   POST   /api/deferred-sync（管理者）
     │   └── utils/                   ロジック層・データアクセス層
     │       ├── session.ts          セッション発行・検証・破棄（ロジック層）
-    │       ├── users.ts            許可リスト参照・パスワード再ハッシュ（ロジック層。予定）
-    │       ├── inventory.ts        在庫増減・閾値判定・採番（ロジック層。予定）
-    │       ├── alert.ts            アラートメール送信・マージ（ロジック層。予定）
-    │       ├── lock.ts             GCS オブジェクトロック取得／解放（ロジック層。予定）
-    │       ├── serialize.ts        インスタンス内直列化（Promiseチェーン。予定。6.1）
-    │       ├── deferredSync.ts     蓄積データの後追い適用＝時差更新（ロジック層。予定）
+    │       ├── users.ts            許可リスト参照・パスワード再ハッシュ（ロジック層）
+    │       ├── inventory.ts        在庫増減・閾値判定・採番（ロジック層）
+    │       ├── alert.ts            アラートメール送信・マージ、通知先設定（ロジック層）
+    │       ├── lock.ts             GCS オブジェクトロック取得／解放（ロジック層）
+    │       ├── serialize.ts        単一インスタンス内の直列化用 Promise チェーン（6.1。現状どの書き込み処理からも呼ばれていない未使用ユーティリティ）
+    │       ├── deferredSync.ts     蓄積データの後追い適用＝時差更新（ロジック層）
     │       ├── sheets.ts           スプレッドシート読み書き（データアクセス層）
-    │       └── gcs.ts              Cloud Storage 読み書き（データアクセス層。予定）
+    │       └── gcs.ts              Cloud Storage 読み書き（データアクセス層。`googleapis` の storage v1 クライアントを使用。`@google-cloud/storage` は追加していない）
     ├── scripts/
     │   └── hash-password.ts         bcryptハッシュ生成CLI（`npm run hash-password`。ユーザ登録時に手入力でハッシュを作成。要件3-1）
     ├── data/
@@ -128,17 +128,17 @@ inventory_system_2/                プロジェクトルート
     └── public/
 ```
 
-未実装（設計を先行させるファイル）:
+主要なロジック層・データアクセス層ファイルの責務（すべて実装済み。上記フォルダ構成の対応先）:
 
-| ファイル（予定） | 層 | 責務 |
+| ファイル | 層 | 責務 |
 |---|---|---|
 | `server/utils/users.ts` | ロジック層 | 許可リスト一覧の取得、本人／管理者によるパスワード再ハッシュ（FR-13 / 3-10） |
 | `server/utils/inventory.ts` | ロジック層 | 在庫増減、閾値判定、アラート送信要否、`ITM-` 採番（FR-06 / FR-07 / FR-12） |
 | `server/utils/alert.ts` | ロジック層 | 通知先設定への在庫アラートメール送信・マージ送信（FR-09）、通知先設定（NotificationTargets）の一覧取得・追加・削除（D-10、3-9、[sequence.md](sequence.md) 2.8） |
 | `server/utils/lock.ts` | ロジック層 | GCS オブジェクトロックの取得／解放（FR-14） |
-| `server/utils/serialize.ts` | ロジック層 | 単一インスタンス内の書き込み処理を Promise チェーンで直列化（6.1） |
+| `server/utils/serialize.ts` | ロジック層 | 単一インスタンス内の書き込み処理を Promise チェーンで直列化するユーティリティ（6.1）。**関数は実装済みだがどこからも呼ばれておらず、現状の直列化は GCS ロック（`lock.ts`）と Cloud Run `max-instances=1` のみで担っている** |
 | `server/utils/deferredSync.ts` | ロジック層 | 蓄積データの後追い適用＝時差更新（FR-15） |
-| `server/utils/gcs.ts` | データアクセス層 | Cloud Storage（`locks/` `pending/` `pending/alerts/`）の読み書き |
+| `server/utils/gcs.ts` | データアクセス層 | Cloud Storage（`locks/` `pending/` `pending/alerts/`）の読み書き。`googleapis` の storage v1 クライアントを使用 |
 | `app/utils/itemId.ts` | FE ユーティリティ | 読み取りコードの itemId 正規化（クライアント側。4.5） |
 | `app/utils/device.ts` | FE ユーティリティ | UA による端末判定（4章） |
 
@@ -172,8 +172,8 @@ inventory_system_2/                プロジェクトルート
 | 要件6章のレイヤー | Nuxt4 での対応 | 該当ファイル | 責務 |
 |---|---|---|---|
 | API層 | Nitro サーバルート | `src/server/api/**/*.ts` | リクエスト受付・入力検証・セッション検証・ロジック層への委譲。業務処理は書かない |
-| ロジック層 | サーバユーティリティ | `src/server/utils/*.ts`（`session.ts` / `inventory.ts`〈予定〉 / `alert.ts`〈予定〉 / `lock.ts`〈予定〉 / `deferredSync.ts`〈予定〉） | 在庫増減、閾値判定、排他制御、時差更新、アラート要否判定 |
-| データアクセス層 | サーバユーティリティ | `src/server/utils/sheets.ts` / `gcs.ts`〈予定〉 | スプレッドシート・GCS への読み書きをここに集約 |
+| ロジック層 | サーバユーティリティ | `src/server/utils/*.ts`（`session.ts` / `inventory.ts` / `alert.ts` / `lock.ts` / `deferredSync.ts` / `users.ts`） | 在庫増減、閾値判定、排他制御、時差更新、アラート要否判定 |
+| データアクセス層 | サーバユーティリティ | `src/server/utils/sheets.ts` / `gcs.ts` | スプレッドシート・GCS への読み書きをここに集約 |
 | 状態管理層（FE） | Nuxt composable | `src/app/composables/useAuth.ts` | ログインユーザ・セッションIDの保持（要件2章「Nuxtjs の状態管理機能によりセッション管理」） |
 
 ```mermaid
@@ -205,16 +205,16 @@ graph LR
 | `POST /api/auth/login` | メール＋パスワードを AllowList と照合しセッション発行。退職フラグ true は拒否 | 実装済 | FR-01、3-2 |
 | `POST /api/auth/logout` | セッション破棄 | 実装済 | 3-3 |
 | `GET /api/auth/user` | セッション検証・有効期限の延長 | 実装済 | 3-3 |
-| `PUT /api/user/password` | ログイン中ユーザのパスワード更新（bcryptjs 再ハッシュ） | 予定 | FR-13、3-10 |
-| `GET /api/users` | 許可リスト一覧の取得（`allowId` / メールアドレス / 管理者判定 / 退職フラグ / 更新年月日。パスワードハッシュは返さない）。管理者のみ | 予定 | 3-10、FR-13 |
-| `PUT /api/users/{allowId}/password` | 管理者が対象ユーザのパスワードをリセット（新パスワードを bcryptjs でハッシュ化し `AllowList` を更新）。管理者のみ | 予定 | 3-10、FR-13 |
-| `GET /api/inventory` | 在庫一覧取得（品目ID・品目名・現在在庫数・閾値・廃番フラグ） | 予定 | FR-02、3-4 |
-| `GET /api/inventory/{itemId}` | 品目単体取得。パス値は itemId（`ITM-xxxxxx`）または GTIN（14桁）のどちらでも可（4.5 / 4.6）。未登録時は `code: ITEM_NOT_FOUND` | 予定 | FR-05、3-5〜3-7 |
-| `POST /api/scan` | 入出庫処理（`type: IN\|OUT`、`quantity`）。未登録品目は品目名・閾値・保管場所（＋ D-03 経由なら読み取った `gtin`）を伴って新規登録＋1点入庫（IN固定、OUT不可）。新規登録は登録経路によらずロック区間内で `ITM-` の最大連番+1 を採番し `data.itemId` で返す。出庫数量が現在在庫数を超える場合は `INSUFFICIENT_STOCK` | 予定 | FR-06、FR-07、FR-12 |
-| `PUT /api/threshold` | 品目ごとの閾値更新（複数一括）。管理者のみ。`locks/inventory.lock` を取得して更新 | 予定 | FR-08、3-8 |
-| `PUT /api/inventory/{itemId}/discontinued` | 廃番フラグ更新。管理者のみ。`locks/inventory.lock` を取得して更新 | 予定 | FR-11、3-8 |
-| `GET /api/notification-targets` / `POST` / `DELETE` | 通知先メールアドレスの参照・追加・削除。管理者のみ。`POST` は `locks/inventory.lock` を取得し `targetId` を `TAR-` の3桁連番（`TAR-001`〜）で採番。`AllowList.targetId` はこの値を参照して管理者に紐付く | 予定 | FR-09、3-9 |
-| `POST /api/deferred-sync` | 蓄積データ（`pending/` 直下）を名前順に後追い適用。管理者のみ。`pending/alerts/` は対象外 | 予定 | FR-15、3-12 |
+| `PUT /api/user/password` | ログイン中ユーザのパスワード更新（bcryptjs 再ハッシュ） | 実装済 | FR-13、3-10 |
+| `GET /api/users` | 許可リスト一覧の取得（`allowId` / メールアドレス / 管理者判定 / 退職フラグ / 更新年月日。パスワードハッシュは返さない）。管理者のみ | 実装済 | 3-10、FR-13 |
+| `PUT /api/users/{allowId}/password` | 管理者が対象ユーザのパスワードをリセット（新パスワードを bcryptjs でハッシュ化し `AllowList` を更新）。管理者のみ | 実装済 | 3-10、FR-13 |
+| `GET /api/inventory` | 在庫一覧取得（品目ID・GTIN・品目名・現在在庫数・閾値・アラート送信済みフラグ・保管場所・廃番フラグ・更新年月日） | 実装済 | FR-02、3-4 |
+| `GET /api/inventory/{itemId}` | 品目単体取得。パス値は itemId（`ITM-xxxxxx`）または GTIN（14桁）のどちらでも可（4.5 / 4.6）。未登録時は `code: ITEM_NOT_FOUND` | 実装済 | FR-05、3-5〜3-7 |
+| `POST /api/scan` | 入出庫処理（`type: IN\|OUT`、`quantity`）。未登録品目は品目名・閾値・保管場所（＋ D-03 経由なら読み取った `gtin`）を伴って新規登録＋1点入庫（IN固定、OUT不可）。新規登録は登録経路によらずロック区間内で `ITM-` の最大連番+1 を採番し `data.itemId` で返す。`gtin` 指定時は登録前にロック区間内で重複登録がないか再確認する。出庫数量が現在在庫数を超える場合は `INSUFFICIENT_STOCK` | 実装済 | FR-06、FR-07、FR-12 |
+| `PUT /api/threshold` | 品目ごとの閾値更新（複数一括）。管理者のみ。`locks/inventory.lock` を取得して更新 | 実装済 | FR-08、3-8 |
+| `PUT /api/inventory/{itemId}/discontinued` | 廃番フラグ更新。管理者のみ。`locks/inventory.lock` を取得して更新 | 実装済 | FR-11、3-8 |
+| `GET /api/notification-targets` / `POST` / `DELETE` | 通知先メールアドレスの参照・追加・削除。管理者のみ。`POST` は `locks/inventory.lock` を取得し `targetId` を `TAR-` の3桁連番（`TAR-001`〜）で採番。`AllowList.targetId` はこの値を参照して管理者に紐付く | 実装済 | FR-09、3-9 |
+| `POST /api/deferred-sync` | 蓄積データ（`pending/` 直下）を名前順に後追い適用。管理者のみ。`pending/alerts/` は対象外 | 実装済 | FR-15、3-12 |
 
 ### 4.3 QRコード発行（D-04）
 
@@ -287,13 +287,13 @@ D-03 のクライアント（`getUserMedia` + ZXing-js）で読み取った文�
 | 分類 | 発生源 | `code`（例） | 挙動 |
 |---|---|---|---|
 | 入力エラー | API層の入力検証 | `INVALID_INPUT` | HTTP 400。クライアントで該当項目にメッセージ表示、画面遷移しない |
-| 認証失敗 | ログイン照合 | `AUTH_FAILED` | メール未登録・パスワード不一致・退職フラグ true をまとめて同一メッセージで返す（列挙攻撃対策、FR-01） |
-| セッション無効 | API層のセッション検証 | `SESSION_INVALID` | D-00 へ強制遷移。状態管理層（`useAuth`）の保持値をクリア（3-3） |
+| 認証失敗 | ログイン照合 | `AUTH_FAILED` | HTTP 401。メール未登録・パスワード不一致・退職フラグ true をまとめて同一メッセージで返す（列挙攻撃対策、FR-01） |
+| セッション無効 | API層のセッション検証 | `SESSION_INVALID` | HTTP 401。D-00 へ強制遷移。状態管理層（`useAuth`）の保持値をクリア（3-3） |
 | 権限エラー | API層の管理者判定 | `PERMISSION_DENIED` | HTTP 403。非管理者が管理者専用API（閾値・廃番・通知先・時差更新）を呼んだ場合。画面遷移しない（D-02 の管理者専用ボタン・D-05 の導線・D-10 の管理者機能は元々非管理者に非表示） |
 | 在庫不足 | ロジック層（出庫の在庫チェック） | `INSUFFICIENT_STOCK` | HTTP 400。出庫数量が現在在庫数を超える場合は拒否し、在庫マスタ・履歴とも更新しない（FR-06。マイナス在庫を作らず、記録数量と実減算数量を一致させる）。ロックは取得済みなら解放する |
-| 排他ロックタイムアウト | ロジック層（`lock.ts`） | `LOCK_TIMEOUT` | 入出庫：待ち時間 5〜10 秒で取得できなければ、当該操作を蓄積データ（`pending/`）へ退避し「時差更新として受け付けた」旨を返す（FR-14）。**新規品目登録・閾値設定・廃番フラグ更新：退避せずエラーを返し、再実行を促す（時差更新の対象外）** |
-| スプレッドシート更新失敗 | データアクセス層 | `SHEET_WRITE_FAILED` | ロック内で書き込みに失敗した入出庫は、`operationId` 付きで蓄積データへ退避し時差更新対象とする（FR-15）。履歴追記を先に確定してから在庫マスタを更新する順序とし、部分失敗時の二重計上を `operationId` の冪等判定で防ぐ（[sequence.md](sequence.md) 2.1 / 2.6） |
-| 品目未登録 | 品目取得 | `ITEM_NOT_FOUND` | D-03 は新規登録フォームへ分岐（画面分岐用の参考情報。登録可否は `POST /api/scan` 内で再判定） |
+| 排他ロックタイムアウト | ロジック層（`lock.ts`） | `LOCK_TIMEOUT` | HTTP 409。入出庫：待ち時間 5〜10 秒で取得できなければ、当該操作を蓄積データ（`pending/`）へ退避し「時差更新として受け付けた」旨を返す（FR-14）。**新規品目登録・閾値設定・廃番フラグ更新：退避せずエラーを返し、再実行を促す（時差更新の対象外）** |
+| スプレッドシート更新失敗 | データアクセス層 | `SHEET_WRITE_FAILED` | HTTP 502。ロック内で書き込みに失敗した入出庫は、`operationId` 付きで蓄積データへ退避し時差更新対象とする（FR-15）。履歴追記を先に確定してから在庫マスタを更新する順序とし、部分失敗時の二重計上を `operationId` の冪等判定で防ぐ（[sequence.md](sequence.md) 2.1 / 2.6） |
+| 品目未登録 | 品目取得 | `ITEM_NOT_FOUND` | HTTP 404。D-03 は新規登録フォームへ分岐（画面分岐用の参考情報。登録可否は `POST /api/scan` 内で再判定） |
 | アラートメール送信失敗 | ロジック層（`alert.ts`） | （握りつぶし） | 在庫更新は確定済みのため成功として返す。送信失敗（Gmail 上限 HTTP 429 を含む）は `pending/alerts/{itemId}.json` に退避し、当日は再送しない。管理者ログイン時にまとめて送信する（FR-09、4.4 / 6.4）。エラー詳細はサーバログのみ |
 | 通信失敗（クライアント） | `$fetch` | - | クライアントでリトライ導線を表示（要件10章「通信失敗」） |
 | 想定外例外 | 全層 | `INTERNAL_ERROR` | HTTP 500。スタックはサーバログのみ、ユーザには汎用メッセージ。DB更新を伴う処理はロック解放を `finally` で保証する |
@@ -315,10 +315,8 @@ D-03 のクライアント（`getUserMedia` + ZXing-js）で読み取った文�
   - スタックロック対策: 取得試行時に本文の `acquiredAt` を見て **30 秒**超過なら `ifGenerationMatch=<その時点の generation>` 付きで強制奪取。複数待機者が同時に奪取を試みても 412 で1人だけ成功し、他は通常のリトライループに戻る。
   - 解放: 保持した `generation` を条件に `objects.delete(ifGenerationMatch=generation)`。412（＝既に奪取された）なら自分のロックではないので何もしない（エラーにしない）。解放は `finally` で必ず試みる。
 - **`locks/inventory.lock` は「スプレッドシートへの書き込み全般の直列化ロック」として扱う。** 入出庫（`POST /api/scan`）に加え、閾値設定（`PUT /api/threshold`）・廃番フラグ（`PUT /api/inventory/{itemId}/discontinued`）・新規品目登録・通知先追加（`POST /api/notification-targets`、`TAR-` 採番）も取得してから書き込む。入出庫以外は取得できなければ時差更新に落とさず `LOCK_TIMEOUT` エラーを返し再実行を促す（管理者のみ・低競合のため同期リトライで十分）。ユーザのパスワード更新（`AllowList`）は照合キーに影響しない単一セル更新のためロック対象外。
-- **多重防御: Cloud Run `max-instances=1` + インスタンス内直列化**（NR-01）。
-  - 直列化は `server/utils/serialize.ts` の **単一の Promise チェーン**で行う（`current = current.then(task)`）。在庫マスタ / TransactionLog / AllowList / GCS を書き込む処理は、この 1 本のチェーンに載せる。ライブラリ（`async-mutex` 等）は使わない。
-  - 同一インスタンス内は Promise チェーンで既に直列化されるため、GCS ロックは主に**インスタンス跨ぎ**（再デプロイ移行期・コールドスタートの一時的な二重起動）の保険として機能する。
-  - `deferred-sync` は「1 pending = 1 チェーン区間」で載せ、間にライブ操作が割り込めるようにする（チェーンを長時間占有しない）。
+- **多重防御: Cloud Run `max-instances=1`**（NR-01）。単一インスタンスに強制することで、複数インスタンスが同時に GCS ロックの外側で競合する事態そのものを避ける。
+  - `server/utils/serialize.ts` は単一インスタンス内の書き込みを Promise チェーンで直列化するユーティリティ（`current = current.then(task)`、ライブラリ不使用）として実装済みだが、**在庫マスタ / TransactionLog / AllowList / GCS の各書き込み処理（`lock.ts` の `withLock` 経由）からは呼ばれておらず、現状は使用されていない**。単一インスタンス内での排他は GCS ロック（`locks/inventory.lock`）のみで担っている。
   - SA 単位の Sheets クォータ（60 req/分）には別途 6.7 の対策が必要。
 - 管理者のスプレッドシート直接編集は排他対象外（要件10章）。
 - 将来、ロック層のみ Firestore（ネイティブトランザクション）へ寄せる余地を残す（NR-06）。
@@ -382,6 +380,7 @@ D-03 のクライアント（`getUserMedia` + ZXing-js）で読み取った文�
 | # | 制限 | 影響 | 運用での緩和 |
 |---|---|---|---|
 | 1 | 同一の物理部品が D-04（自社発行QR、`gtin` なし）で先に登録された後、そのメーカーバーコードを D-03 でスキャンすると `gtin` 列が空のため未登録と判定され、別の `itemId` として重複登録され得る（4.5 / FR-12） | 同一部品が2つの `itemId` に分裂し、在庫数・入出庫履歴が分散する。設計上の検出・防止機構はない | 既存のQRラベルがあればそれを貼り直して使う（新たにメーカーバーコードで読み直さない）。新規スキャン前に D-02 在庫一覧で同名品目が無いか確認する。重複が判明した場合は棚卸で一本化する（NR-02 と同様の運用） |
+| 2 | 時差更新（`deferredSync.ts`）の適用時に対象 `itemId` が在庫マスタに見つからない場合、当該 `pending/` オブジェクトはエラーにせず削除される（`TransactionLog` への追記も行わない） | 対象品目が廃止・誤入力等で存在しない場合、その入出庫はどこにも記録されずに消える | 通常運用では発生しない（品目削除機能が無いため）。発生した場合は棚卸で実数に合わせる（NR-02 と同様の運用） |
 
 ---
 
@@ -394,8 +393,6 @@ D-03 のクライアント（`getUserMedia` + ZXing-js）で読み取った文�
 | 1 | 一時データ／ロック用 GCS バケットの作成と実行SAへの権限付与 → GCS 実書き込み・オブジェクトロックの再検証 | インフラ準備 | [deployment.md](../manuals/deployment.md) 3.3 / 6、technical_verification.md 検証1・検証2 |
 | 2 | メール通知の認証方式の確定（Gmail SMTP + アプリパスワード）→ 実送信の疎通確認 | インフラ準備 | [deployment.md](../manuals/deployment.md) 3.5 / 6、technical_verification.md 検証3 |
 | 3 | 実機（iOS Safari / Android Chrome）でのカメラ読み取り・GTIN 抽出の検証 | 実装フェーズ | [deployment.md](../manuals/deployment.md) 6、technical_verification.md 検証4 |
-| 4 | 業務API（在庫一覧・スキャン・閾値・廃番・通知先・時差更新・ユーザ管理）の実装。現状は認証APIのみ | 実装フェーズ | 4.2 / 4.6 |
-| 5 | QR印刷レイアウト（ラベル用紙サイズ、クワイエットゾーン）の実機印刷検証 | 実装フェーズ | 6.5 |
-| 6 | パスワードハッシュ生成CLI（`npm run hash-password`）の実装 | 実装フェーズ | 要件3-1 |
-| 7 | ユーザーマニュアル（`docs/manuals/user_manual.md`）の新構成への全面改訂（2ドメイン記述・パスワードなし認証の記述などを是正） | 実装完了後 | - |
-| 8 | GS1 DataMatrix 手入力フォールバック（アプリ内ブラウザ・ラベル破損時の代替）の要否確定 | 実装フェーズ | 6.5 |
+| 4 | QR印刷レイアウト（ラベル用紙サイズ、クワイエットゾーン）の実機印刷検証。印刷用CSS（`@page`、91mm×55mm）は実装済みで、用紙上の実寸確認が残る | 実装フェーズ | 6.5 |
+| 5 | ユーザーマニュアル（`docs/manuals/user_manual.md`）の新構成への全面改訂（2ドメイン記述・パスワードなし認証の記述などを是正） | 実装完了後 | - |
+| 6 | GS1 DataMatrix 手入力フォールバック（ラベル破損時の代替）の要否確定。アプリ内ブラウザ（LINE/Slack等）については、カメラ起動失敗時に「通常ブラウザで開き直してください」と案内するメッセージのみ実装済み（`inport_qr.vue`） | 実装フェーズ | 6.5 |

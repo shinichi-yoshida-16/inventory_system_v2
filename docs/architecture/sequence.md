@@ -205,7 +205,7 @@ sequenceDiagram
   - 解放：保持した `generation` を条件に `objects.delete(ifGenerationMatch=generation)`。412 なら奪取済みで何もしない。`finally` で必ず試みる。
   - スタックロック対策：本文の `acquiredAt` が **30秒**超なら `ifGenerationMatch=<現generation>` 付きで強制奪取。
 - **`locks/inventory.lock` はスプレッドシート書き込み全般の直列化ロック**。入出庫に加え、閾値設定・廃番フラグ更新・新規品目登録・通知先追加（`TAR-` 採番）も取得してから書き込む（現場スキャンとの lost update を防ぐ）。入出庫以外は取得不可なら時差更新に落とさず `LOCK_TIMEOUT` エラー（[overview.md](overview.md) 6.1）。パスワード更新（`AllowList`）はロック対象外。
-- **多重防御：Cloud Run `max-instances=1` ＋ インスタンス内直列化**（`server/utils/serialize.ts` の単一 Promise チェーン。ライブラリ不使用。[overview.md](overview.md) 6.1）。SA 単位の Sheets クォータ対策は [overview.md](overview.md) 6.7。
+- **多重防御：Cloud Run `max-instances=1`**。`server/utils/serialize.ts`（単一 Promise チェーンによるインスタンス内直列化ユーティリティ）は実装済みだが、現状どの書き込み処理からも呼ばれておらず未使用（[overview.md](overview.md) 6.1）。SA 単位の Sheets クォータ対策は [overview.md](overview.md) 6.7。
 - 管理者のスプレッドシート直接編集は排他対象外（要件10章、運用でカバー）。
 - 将来、ロック層のみ Firestore（ネイティブトランザクション）へ寄せる余地を残す（NR-06、[overview.md](overview.md) 6.1）。
 
@@ -326,6 +326,7 @@ sequenceDiagram
 ```
 
 - 蓄積データ（`pending/{ISO8601}-{rand}.json`）は `{ operationId, itemId, type:"IN"|"OUT", quantity, operator, occurredAt }`（`occurredAt` は UTC ISO8601）。名前順に適用することで時系列順の反映を担保する（[overview.md](overview.md) 6.2）。対象は入出庫のみ。
+- 適用対象の `itemId` が在庫マスタに存在しない場合、`TransactionLog` への追記・在庫マスタ更新のいずれも行わず、当該 `pending/` オブジェクトを削除する（エラーにはしない。[overview.md](overview.md) 6.8 の既知の制限事項）。
 - 適用は 1操作 = 1ロック区間で行い、通常の入出庫（2.1・2.2）と同じ計算式・閾値判定に合流させる。
 - **`operationId` で冪等に適用する。** `TransactionLog` に同 `operationId` の行が既にあれば（＝部分書き込み失敗時に履歴だけ確定していたケース）、履歴追記をスキップし在庫マスタのみ整合させる。二重計上を防ぐ（[database.md](database.md) 2章）。
 - Sheets クォータ（60 req/分/SA、全利用者で共有）に収めるため、**1件処理ごとに約 1.5 秒空ける**。`RESOURCE_EXHAUSTED` は 2s→4s→8s の指数バックオフで最大3回、なお失敗ならその回を打ち切って残件を保持する（[overview.md](overview.md) 6.2 / 6.7）。
