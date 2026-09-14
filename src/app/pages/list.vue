@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// D-02: 在庫一覧画面（FR-02、廃番品目はグレーアウト表示。管理者のみ時差更新ボタン、3-12）
+// D-02: 在庫一覧画面（FR-02、廃番品目は一覧に表示しない。管理者のみ時差更新ボタン、3-12）
 definePageMeta({ middleware: 'auth' })
 
 interface InventoryItem {
@@ -30,6 +30,8 @@ const load = async () => {
   }
 }
 
+const visibleItems = computed(() => items.value.filter((item) => !item.discontinuedFlag))
+
 onMounted(load)
 
 // 管理者: 時差更新
@@ -58,7 +60,7 @@ const handleDeferredSync = async () => {
   <p v-if="loading">読み込み中...</p>
   <p v-if="error" style="color: red">{{ error }}</p>
 
-  <table v-if="!loading && items.length">
+  <table v-if="!loading && visibleItems.length">
     <thead>
       <tr>
         <th>品目ID</th>
@@ -69,13 +71,9 @@ const handleDeferredSync = async () => {
       </tr>
     </thead>
     <tbody>
-      <tr
-        v-for="item in items"
-        :key="item.itemId"
-        :style="item.discontinuedFlag ? 'color: #999; text-decoration: line-through' : ''"
-      >
+      <tr v-for="item in visibleItems" :key="item.itemId">
         <td>{{ item.itemId }}</td>
-        <td>{{ item.itemName }}<span v-if="item.discontinuedFlag">（廃番）</span></td>
+        <td>{{ item.itemName }}</td>
         <td>{{ item.currentStock }}</td>
         <td>{{ item.threshold }}</td>
         <td>{{ item.location }}</td>
