@@ -20,6 +20,13 @@ const completeMessage = ref('')
 let controls: IScannerControls | null = null
 let codeReader: BrowserMultiFormatReader | null = null
 
+// LINE/Slack等のアプリ内ブラウザ（WebView）はHTTPS・権限が正しくてもカメラAPIを遮断することがあるため、
+// 汎用エラーと切り分けて案内する
+const IN_APP_BROWSER_PATTERN = /Line\/|FBAN|FBAV|Instagram|Twitter|MicroMessenger|KAKAOTALK|Slack/i
+function isInAppBrowser() {
+  return IN_APP_BROWSER_PATTERN.test(navigator.userAgent)
+}
+
 // 確認画面（登録済み品目）
 const currentItemId = ref('')
 const currentItemName = ref('')
@@ -64,8 +71,15 @@ async function startScanning() {
         if (result) handleScanned(result.getText())
       }
     )
-  } catch {
-    errorMessage.value = 'カメラを起動できませんでした。HTTPS接続・カメラ権限をご確認ください'
+  } catch (e) {
+    console.error('カメラ起動に失敗しました', e)
+    if (isInAppBrowser()) {
+      errorMessage.value =
+        'アプリ内ブラウザ（LINE/Slack等）ではカメラを利用できない場合があります。メニューから「ブラウザで開く」を選択し、Safari/Chromeで開き直してください。'
+    } else {
+      const name = e instanceof DOMException ? e.name : undefined
+      errorMessage.value = `カメラを起動できませんでした。HTTPS接続・カメラ権限をご確認ください。${name ? `（${name}）` : ''}`
+    }
     state.value = 'error'
   }
 }
