@@ -7,6 +7,7 @@ import QRCode from 'qrcode'
 interface InventoryItem {
   itemId: string
   itemName: string
+  discontinuedFlag: boolean
 }
 
 const { apiFetch } = useApi()
@@ -33,6 +34,8 @@ const loadItems = async () => {
     // 再発行用の一覧取得のみなので、失敗しても新規登録は継続可能
   }
 }
+const reissuableItems = computed(() => items.value.filter((item) => !item.discontinuedFlag))
+
 onMounted(loadItems)
 
 const generateQr = async (itemId: string, itemName: string) => {
@@ -84,7 +87,7 @@ const handlePrint = () => window.print()
     <h2>既存品目のQR再発行</h2>
     <select v-model="selectedItemId">
       <option value="" disabled>品目を選択してください</option>
-      <option v-for="item in items" :key="item.itemId" :value="item.itemId">
+      <option v-for="item in reissuableItems" :key="item.itemId" :value="item.itemId">
         {{ item.itemId }} - {{ item.itemName }}
       </option>
     </select>
