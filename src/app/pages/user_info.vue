@@ -13,6 +13,13 @@ interface NotificationTarget {
   targetId: string
   email: string
 }
+interface MergedUserRow {
+  allowId: string | null
+  email: string
+  isAdmin: boolean
+  retiredFlag: boolean
+  targetId: string | null
+}
 
 const { apiFetch } = useApi()
 const { isAdmin } = useAuth()
@@ -78,6 +85,41 @@ onMounted(() => {
   }
 })
 
+// 許可リストと通知先を1テーブルにマージ表示（メールアドレスで対応付け）
+const mergedRows = computed<MergedUserRow[]>(() => {
+  const rows: MergedUserRow[] = users.value.map((u) => {
+    const target = targets.value.find((t) => t.email === u.email)
+    return {
+      allowId: u.allowId,
+      email: u.email,
+      isAdmin: u.isAdmin,
+      retiredFlag: u.retiredFlag,
+      targetId: target?.targetId ?? null,
+    }
+  })
+
+  for (const target of targets.value) {
+    if (rows.some((r) => r.email === target.email)) continue
+    rows.push({ allowId: null, email: target.email, isAdmin: false, retiredFlag: false, targetId: target.targetId })
+  }
+
+  return rows
+})
+
+const handleToggleTarget = async (row: MergedUserRow) => {
+  targetError.value = ''
+  try {
+    if (row.targetId) {
+      await apiFetch('/api/notification-targets', { method: 'DELETE', body: { targetId: row.targetId } })
+    } else {
+      await apiFetch('/api/notification-targets', { method: 'POST', body: { email: row.email } })
+    }
+    await loadTargets()
+  } catch (e) {
+    targetError.value = e instanceof Error ? e.message : '更新に失敗しました'
+  }
+}
+
 const handleResetPassword = async () => {
   resetMessage.value = ''
   resetError.value = ''
@@ -104,16 +146,6 @@ const handleAddTarget = async () => {
     targetError.value = e instanceof Error ? e.message : '追加に失敗しました'
   }
 }
-
-const handleRemoveTarget = async (targetId: string) => {
-  targetError.value = ''
-  try {
-    await apiFetch('/api/notification-targets', { method: 'DELETE', body: { targetId } })
-    await loadTargets()
-  } catch (e) {
-    targetError.value = e instanceof Error ? e.message : '削除に失敗しました'
-  }
-}
 </script>
 
 <template>
@@ -130,26 +162,37 @@ const handleRemoveTarget = async (targetId: string) => {
   </section>
 
   <section v-if="isAdmin">
-    <h2>許可リスト（管理者機能）</h2>
+    <h2>許可リスト・通知先設定（管理者機能）</h2>
     <p v-if="listError" style="color: red">{{ listError }}</p>
-    <table>
-      <thead>
-        <tr>
-          <th>許可ID</th>
-          <th>メールアドレス</th>
-          <th>管理者</th>
-          <th>退職</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="u in users" :key="u.allowId">
-          <td>{{ u.allowId }}</td>
-          <td>{{ u.email }}</td>
-          <td>{{ u.isAdmin ? '○' : '' }}</td>
-          <td>{{ u.retiredFlag ? '○' : '' }}</td>
-        </tr>
-      </tbody>
-    </table>
+
+    <div class="table-wrap">
+      <table class="user-table">
+        <thead>
+          <tr>
+            <th>許可ID</th>
+            <th>メールアドレス</th>
+            <th class="col-center">管理者</th>
+            <th class="col-center">退職</th>
+            <th class="col-center">通知先</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in mergedRows" :key="row.email">
+            <td data-label="許可ID">{{ row.allowId ?? '-' }}</td>
+            <td data-label="メールアドレス">{{ row.email }}</td>
+            <td class="col-center" data-label="管理者">{{ row.isAdmin ? '○' : '' }}</td>
+            <td class="col-center" data-label="退職">{{ row.retiredFlag ? '○' : '' }}</td>
+            <td class="col-center" data-label="通知先">
+              <input type="checkbox" :checked="!!row.targetId" @change="handleToggleTarget(row)" />
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <input v-model="newTargetEmail" type="email" placeholder="通知先メールアドレス（許可リストにないアドレスを追加）" />
+    <button @click="handleAddTarget">追加</button>
+    <p v-if="targetError" style="color: red">{{ targetError }}</p>
 
     <h3>パスワードのリセット</h3>
     <select v-model="resetTargetAllowId">
@@ -161,16 +204,82 @@ const handleRemoveTarget = async (targetId: string) => {
     <button :disabled="!resetTargetAllowId" @click="handleResetPassword">リセット</button>
     <p v-if="resetMessage" style="color: green">{{ resetMessage }}</p>
     <p v-if="resetError" style="color: red">{{ resetError }}</p>
-
-    <h2>通知先設定</h2>
-    <ul>
-      <li v-for="target in targets" :key="target.targetId">
-        {{ target.email }}
-        <button @click="handleRemoveTarget(target.targetId)">削除</button>
-      </li>
-    </ul>
-    <input v-model="newTargetEmail" type="email" placeholder="通知先メールアドレス" />
-    <button @click="handleAddTarget">追加</button>
-    <p v-if="targetError" style="color: red">{{ targetError }}</p>
   </section>
 </template>
+
+<style scoped>
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+}
+
+.user-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.user-table thead th {
+  position: sticky;
+  top: 0;
+  background: #f5f6f8;
+  text-align: left;
+  padding: 0.6rem 0.8rem;
+  border-bottom: 2px solid #ddd;
+  white-space: nowrap;
+}
+
+.user-table td {
+  padding: 0.55rem 0.8rem;
+  border-bottom: 1px solid #eee;
+}
+
+.user-table tbody tr:nth-child(even) {
+  background: #fafafa;
+}
+
+.user-table tbody tr:hover {
+  background: #eef4ff;
+}
+
+.col-center {
+  text-align: center;
+}
+
+/* スマホ幅ではテーブルをCSS Gridのカード表示に切り替える */
+@media (max-width: 560px) {
+  .user-table thead {
+    display: none;
+  }
+
+  .user-table,
+  .user-table tbody,
+  .user-table tr {
+    display: block;
+    width: 100%;
+  }
+
+  .user-table tbody tr {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.2rem 0.8rem;
+    padding: 0.7rem 0.8rem;
+    border-bottom: 1px solid #eee;
+  }
+
+  .user-table td {
+    display: contents;
+  }
+
+  .user-table td::before {
+    content: attr(data-label);
+    color: #666;
+    font-size: 0.8rem;
+  }
+
+  .col-center {
+    text-align: left;
+  }
+}
+</style>
