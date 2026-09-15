@@ -200,7 +200,8 @@ onBeforeUnmount(stopScanning)
 
   <div v-if="state === 'scanning'">
     <video ref="videoRef" style="width: 100%; max-width: 400px" muted playsinline />
-    <p>カメラでQR / JAN / GS1 DataMatrixを読み取ってください</p>
+    <p>カメラでQRコード / バーコード / GS1 DataMatrixを読み取ってください</p>
+    <p>JANバーコード(縦縞模様のバーコード)は縦向きのままだと読み取れない場合があります。横向きにしてご使用ください。</p>
   </div>
 
   <div v-else-if="state === 'confirm'">
