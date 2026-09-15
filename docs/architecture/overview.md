@@ -46,8 +46,8 @@ graph TB
     FE --> API
     API --> LOGIC
     LOGIC --> DAO
-    DAO -->|googleapis| SS
-    DAO -->|googleapis（storage v1）| GCS
+    DAO -->|"@googleapis/sheets"| SS
+    DAO -->|"@googleapis/storage（v1）"| GCS
     LOGIC -->|アラート送信| GMAIL
     run -.-> SM
 ```
@@ -120,7 +120,7 @@ inventory_system_2/                プロジェクトルート
     │       ├── serialize.ts        単一インスタンス内の直列化用 Promise チェーン（6.1。現状どの書き込み処理からも呼ばれていない未使用ユーティリティ）
     │       ├── deferredSync.ts     蓄積データの後追い適用＝時差更新（ロジック層）
     │       ├── sheets.ts           スプレッドシート読み書き（データアクセス層）
-    │       └── gcs.ts              Cloud Storage 読み書き（データアクセス層。`googleapis` の storage v1 クライアントを使用。`@google-cloud/storage` は追加していない）
+    │       └── gcs.ts              Cloud Storage 読み書き（データアクセス層。`@googleapis/storage` の v1 クライアントを使用。フルの `@google-cloud/storage` は追加していない）
     ├── scripts/
     │   └── hash-password.ts         bcryptハッシュ生成CLI（`npm run hash-password`。ユーザ登録時に手入力でハッシュを作成。要件3-1）
     ├── data/
@@ -138,7 +138,7 @@ inventory_system_2/                プロジェクトルート
 | `server/utils/lock.ts` | ロジック層 | GCS オブジェクトロックの取得／解放（FR-14） |
 | `server/utils/serialize.ts` | ロジック層 | 単一インスタンス内の書き込み処理を Promise チェーンで直列化するユーティリティ（6.1）。**関数は実装済みだがどこからも呼ばれておらず、現状の直列化は GCS ロック（`lock.ts`）と Cloud Run `max-instances=1` のみで担っている** |
 | `server/utils/deferredSync.ts` | ロジック層 | 蓄積データの後追い適用＝時差更新（FR-15） |
-| `server/utils/gcs.ts` | データアクセス層 | Cloud Storage（`locks/` `pending/` `pending/alerts/`）の読み書き。`googleapis` の storage v1 クライアントを使用 |
+| `server/utils/gcs.ts` | データアクセス層 | Cloud Storage（`locks/` `pending/` `pending/alerts/`）の読み書き。`@googleapis/storage` の v1 クライアントを使用 |
 | `app/utils/itemId.ts` | FE ユーティリティ | 読み取りコードの itemId 正規化（クライアント側。4.5） |
 | `app/utils/device.ts` | FE ユーティリティ | UA による端末判定（4章） |
 

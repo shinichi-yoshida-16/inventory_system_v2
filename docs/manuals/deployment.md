@@ -152,6 +152,7 @@ gcloud run deploy inventory-system \
   --min-instances=0 \
   --concurrency=20 \
   --cpu=1 --memory=512Mi \
+  --cpu-boost \
   --allow-unauthenticated \
   --set-env-vars=NUXT_GOOGLE_SERVICE_ACCOUNT_EMAIL=xxxx,NUXT_GOOGLE_SPREADSHEET_ID=xxxx,NUXT_GCS_BUCKET=$BUCKET,NUXT_GMAIL_SENDER=notify@example.com \
   --set-secrets=NUXT_GOOGLE_PRIVATE_KEY=google-private-key:latest,NUXT_GMAIL_APP_PASSWORD=gmail-app-password:latest
@@ -161,6 +162,7 @@ gcloud run deploy inventory-system \
 - `--concurrency=20`：利用者最大10名（NR-01）に対し十分。
 - `--allow-unauthenticated`：認証はアプリ内の AllowList / セッションで行うため、Cloud Run 側は公開でよい（利用者を IAM で管理しない）。
 - `--min-instances=0`：コスト優先（NR-04）。日初回アクセスのコールドスタートは許容。
+- `--cpu-boost`：コールドスタート時のみ一時的にCPUを増強し起動を短縮する機能。常時課金は発生しないため `min-instances=0` の方針と両立する。
 
 ### 4.4 セッション永続化（暫定）
 

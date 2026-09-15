@@ -12,10 +12,12 @@
     "hash-password": "tsx scripts/hash-password.ts"
   },
   "dependencies": {
+    "@googleapis/sheets": "^18.0.0",
+    "@googleapis/storage": "^26.0.0",
     "@zxing/browser": "^0.2.1",
     "@zxing/library": "^0.23.0",
     "bcryptjs": "^3.0.3",
-    "googleapis": "^178.0.0",
+    "google-auth-library": "^11.0.0",
     "nodemailer": "^10.0.3",
     "nuxt": "^4.5.2",
     "qrcode": "^1.5.4",

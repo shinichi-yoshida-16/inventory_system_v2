@@ -1,5 +1,6 @@
 // サービスアカウント認証の共通化（sheets.ts / gcs.ts で共用）。
-import { google } from 'googleapis'
+// コールドスタート短縮のため、全API同梱の googleapis ではなく google-auth-library を直接使う。
+import { GoogleAuth } from 'google-auth-library'
 
 /**
  * 秘密鍵の環境変数値を正規化する。
@@ -14,7 +15,7 @@ function normalizePrivateKey(raw: string): string {
 
 export function createGoogleAuth(scopes: string[]) {
   const config = useRuntimeConfig()
-  return new google.auth.GoogleAuth({
+  return new GoogleAuth({
     credentials: {
       client_email: config.googleServiceAccountEmail,
       private_key: normalizePrivateKey(config.googlePrivateKey),

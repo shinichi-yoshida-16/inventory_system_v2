@@ -5,7 +5,7 @@
 - 対象 : 要件定義書 7章のデータ設計を、実装可能な列定義まで落とし込んだもの
 - 実体 : Googleスプレッドシートを本番DBとして使用する
   - スプレッドシートIDは `.env` の `GOOGLE_SPREADSHEET_ID` に設定し、`nuxt.config.ts` の `runtimeConfig` 経由で読み取る（リポジトリには含めない。本番は Secret Manager に格納。[overview.md](overview.md) 2.2）
-  - スプレッドシートへの読み書きはデータアクセス層（`src/server/utils/sheets.ts`）が `googleapis`（Sheets API）経由で行い、ロジック層・API層から直接呼ばない（[overview.md](overview.md) 3.1）
+  - スプレッドシートへの読み書きはデータアクセス層（`src/server/utils/sheets.ts`）が `@googleapis/sheets`（Sheets API v4）経由で行い、ロジック層・API層から直接呼ばない（[overview.md](overview.md) 3.1）
 - 対象外 : 排他ロック（`locks/`）、時差更新の蓄積データ（`pending/`）、通知マージ対象（`pending/alerts/`）は Cloud Storage 上の JSON であり本書では扱わない。データ形状は [overview.md](overview.md) 6.1 / 6.2 / 4.4、フローは [sequence.md](sequence.md) 2.3 / 2.6 を参照
 
 シート名はA1にヘッダー行を持つ想定とする。

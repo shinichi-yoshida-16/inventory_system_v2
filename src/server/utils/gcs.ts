@@ -1,8 +1,9 @@
 // データアクセス層: Cloud Storage（locks/ 排他ロック、pending/ 時差更新の蓄積データ、
 // pending/alerts/ 通知マージ対象）の読み書き（overview.md 3.1 / 6.1 / 6.2）。
-// verification/01_gcs_bucket.mjs で実証済みの googleapis の storage v1 クライアントをそのまま用いる
-// （既に依存に含まれる googleapis を再利用し、@google-cloud/storage は追加しない）。
-import { google, storage_v1 } from 'googleapis'
+// verification/01_gcs_bucket.mjs で実証済みの storage v1 クライアントをそのまま用いる。
+// フルの @google-cloud/storage SDKは追加せず、コールドスタート短縮のため
+// 全API同梱の googleapis でもなく Storage単体の @googleapis/storage を使う。
+import { storage, storage_v1 } from '@googleapis/storage'
 import { createGoogleAuth } from './googleAuth'
 
 let storageClient: storage_v1.Storage | null = null
@@ -11,7 +12,7 @@ async function getStorageClient() {
   if (storageClient) return storageClient
 
   const auth = createGoogleAuth(['https://www.googleapis.com/auth/devstorage.read_write'])
-  storageClient = google.storage({ version: 'v1', auth })
+  storageClient = storage({ version: 'v1', auth })
   return storageClient
 }
 
