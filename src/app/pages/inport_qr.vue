@@ -111,29 +111,31 @@ async function handleScanned(text: string) {
   }
 
   try {
-    const item = await apiFetch<{ itemId: string; itemName: string; currentStock: number }>(
-      `/api/inventory/${code.value}`
-    )
-    currentItemId.value = item.itemId
-    currentItemName.value = item.itemName
-    currentStock.value = item.currentStock
-    scanType.value = 'IN'
-    quantity.value = 1
-    confirmError.value = ''
-    state.value = 'confirm'
-  } catch (e) {
-    const err = e as ApiCallError
-    if (err.code === 'ITEM_NOT_FOUND') {
+    const result = await apiFetch<
+      | { exists: true; itemId: string; itemName: string; currentStock: number }
+      | { exists: false }
+    >(`/api/inventory/${code.value}/exists`)
+
+    if (result.exists) {
+      currentItemId.value = result.itemId
+      currentItemName.value = result.itemName
+      currentStock.value = result.currentStock
+      scanType.value = 'IN'
+      quantity.value = 1
+      confirmError.value = ''
+      state.value = 'confirm'
+    } else {
       pendingGtin.value = code.kind === 'gtin' ? code.value : undefined
       newItemName.value = ''
       newThreshold.value = 0
       newLocation.value = ''
       newRegisterError.value = ''
       state.value = 'newRegister'
-    } else {
-      errorMessage.value = err.message || '読み取りに失敗しました'
-      state.value = 'error'
     }
+  } catch (e) {
+    const err = e as ApiCallError
+    errorMessage.value = err.message || '読み取りに失敗しました'
+    state.value = 'error'
   }
 }
 

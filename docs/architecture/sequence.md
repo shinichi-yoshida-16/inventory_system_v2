@@ -116,13 +116,13 @@ sequenceDiagram
     participant Alert as alert.ts → Gmail
 
     U->>FE: コード読取 → itemId／GTIN 正規化（overview.md 4.5節）
-    FE->>API: GET /api/inventory/{itemIdまたはgtin}（x-session-id）
+    FE->>API: GET /api/inventory/{itemIdまたはgtin}/exists（x-session-id）
     API->>API: validateSession
-    API->>Logic: 品目取得を委譲
+    API->>Logic: 品目存在確認を委譲
     Logic->>DAO: 在庫マスタ検索（itemId 列 → 一致なければ gtin 列）
     DAO->>SS: 読み取り
     SS-->>DAO: 品目情報
-    API-->>FE: status:OK, data（実在する itemId・品目名・現在在庫数）
+    API-->>FE: status:OK, data:{ exists:true, itemId, itemName, currentStock }
     FE-->>U: 確認画面（数量・種別入力、transition.md 5.3）<br/>※以降は応答の itemId を使用
 
     U->>FE: 出庫数量入力 → 登録押下
@@ -228,13 +228,13 @@ sequenceDiagram
 
     U->>FE: コード読取（JAN / GS1 DataMatrix）
     FE->>FE: フォーマット判定・GTIN 正規化（overview.md 4.5節）
-    FE->>API: GET /api/inventory/{gtin}（x-session-id）
-    API->>Logic: 品目検索を委譲
+    FE->>API: GET /api/inventory/{gtin}/exists（x-session-id）
+    API->>Logic: 品目存在確認を委譲
     Logic->>DAO: 在庫マスタ検索（itemId 列 → gtin 列）
     DAO->>SS: 読み取り
     SS-->>DAO: 該当なし
-    Logic-->>API: status:ERROR, code:ITEM_NOT_FOUND
-    API-->>FE: 未登録
+    Logic-->>API: null（未検出）
+    API-->>FE: status:OK, data:{ exists:false }（HTTP 200。未登録は正常フローのため404は使わない）
     FE-->>U: 新規登録フォーム表示（品目名・閾値・保管場所）。読み取った GTIN は保持しておく
 
     U->>FE: 登録情報入力 → 登録押下
@@ -265,11 +265,11 @@ sequenceDiagram
     end
 ```
 
-- 「未登録判定」から「新規行追加」までを同一のロック区間内で行い、確認（`GET /api/inventory/{gtin}`）と登録（`POST /api/scan`）の間の割り込みによるレース条件を避ける。`GET` での未登録判定はあくまで画面分岐用の参考情報であり、登録可否は `POST /api/scan` 内で再判定する（[overview.md](overview.md) 5章、[transition.md](transition.md) 5.3）。
+- 「未登録判定」から「新規行追加」までを同一のロック区間内で行い、確認（`GET /api/inventory/{gtin}/exists`）と登録（`POST /api/scan`）の間の割り込みによるレース条件を避ける。`exists` での未登録判定はあくまで画面分岐用の参考情報であり、登録可否は `POST /api/scan` 内で再判定する（[overview.md](overview.md) 5章、[transition.md](transition.md) 5.3）。
 - 新規登録時は種別を `IN` 固定とし、`OUT` は拒否する（存在しない品目からの出庫を防止するため、FR-12）。在庫数 0 のままでの登録は行わない。
 - **新規登録はロックを取得できなければ即時エラー（`LOCK_TIMEOUT`）とし、時差更新（`pending/`）には落とさない**。蓄積データのスキーマは入出庫用（`{ operationId, itemId, type, quantity, operator, occurredAt }`）で品目名・閾値・保管場所を保持できず、後追い適用時に itemId が存在せず失敗し続けるため。ユーザには再実行を促す（要件 3-5）。
 - **登録経路によらず `itemId` は `ITM-` の最大連番+1 をサーバがロック区間内で採番する**（[overview.md](overview.md) 6.1 / 4.3）。D-03（バーコード読み取り）経由では、あわせて読み取った GTIN-14 を `gtin` 列に保持する。D-04（自社発行QR）経由の新規登録は `gtin` を送らない（メーカーバーコードを持たない品目）。採番した `itemId` はレスポンス（`data.itemId`）で返し、D-04 のクライアントはその値で QR を生成する。
-- 登録済み品目の通常の入出庫は 2.1・2.2 と同一（識別コードの取得元が自社発行QRかJAN/DataMatrixかを問わず、`GET` の応答で得た `itemId` を使う）。
+- 登録済み品目の通常の入出庫は 2.1・2.2 と同一（識別コードの取得元が自社発行QRかJAN/DataMatrixかを問わず、`exists` の応答で得た `itemId` を使う）。
 
 ### 2.6 時差更新（蓄積データの後追い適用）シーケンス（FR-15・要件 3-12 該当）
 

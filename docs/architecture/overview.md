@@ -103,6 +103,7 @@ inventory_system_2/                プロジェクトルート
     │   │   │   ├── index.get.ts        GET    /api/inventory
     │   │   │   └── [itemId]/
     │   │   │       ├── index.get.ts    GET    /api/inventory/{itemId}
+    │   │   │       ├── exists.get.ts   GET    /api/inventory/{itemId}/exists（品目存在確認。D-03専用、未登録も200で返す）
     │   │   │       └── discontinued.put.ts  PUT /api/inventory/{itemId}/discontinued（管理者）
     │   │   ├── scan.post.ts            POST   /api/scan（入出庫・新規登録）
     │   │   ├── threshold.put.ts        PUT    /api/threshold（管理者）
@@ -196,7 +197,7 @@ graph LR
 - 成功時は `{ status: "OK", data: ... }`、失敗時は `{ status: "ERROR", code: ..., message: ... }` を基本形とする（`code` は 4.2 / 5章のコード表に従う）。リクエスト／レスポンスのボディ構造と項目バリデーションは 4.6 に定める。
 - 操作者は「セッションに紐づくメールアドレス」をサーバ側で解決し、クライアントからは受け取らない（なりすまし面の縮小、FR-06 / FR-07）。
 - 管理者専用API（`PUT /api/threshold`、`PUT /api/inventory/{itemId}/discontinued`、`GET/POST/DELETE /api/notification-targets`、`POST /api/deferred-sync`、`GET /api/users`、`PUT /api/users/{allowId}/password`）は、API層で `x-session-id` から `AllowList` 行を再解決し `targetId` の有無で管理者判定を行う。クライアント（`useAuth` の管理者フラグ）は信頼しない。非管理者の呼び出しは `code: PERMISSION_DENIED`（HTTP 403）。
-- `itemId` はサーバ側でも形式を再検証する（`^ITM-\d{6}$`）。`GET /api/inventory/{itemId}` のパス値のみ、GTIN での検索を許すため `^\d{14}$` も許容する（4.6）。GS1 / JAN の解析・正規化はクライアントで行う（4.5）ため、サーバは受領値を信頼せず検証してから使用する。
+- `itemId` はサーバ側でも形式を再検証する（`^ITM-\d{6}$`）。`GET /api/inventory/{itemId}` および `GET /api/inventory/{itemId}/exists` のパス値のみ、GTIN での検索を許すため `^\d{14}$` も許容する（4.6）。GS1 / JAN の解析・正規化はクライアントで行う（4.5）ため、サーバは受領値を信頼せず検証してから使用する。
 
 ### 4.2 エンドポイント一覧
 
@@ -210,6 +211,7 @@ graph LR
 | `PUT /api/users/{allowId}/password` | 管理者が対象ユーザのパスワードをリセット（新パスワードを bcryptjs でハッシュ化し `AllowList` を更新）。管理者のみ | 実装済 | 3-10、FR-13 |
 | `GET /api/inventory` | 在庫一覧取得（品目ID・GTIN・品目名・現在在庫数・閾値・アラート送信済みフラグ・保管場所・廃番フラグ・更新年月日） | 実装済 | FR-02、3-4 |
 | `GET /api/inventory/{itemId}` | 品目単体取得。パス値は itemId（`ITM-xxxxxx`）または GTIN（14桁）のどちらでも可（4.5 / 4.6）。未登録時は `code: ITEM_NOT_FOUND` | 実装済 | FR-05、3-5〜3-7 |
+| `GET /api/inventory/{itemId}/exists` | 品目存在確認。パス値は itemId または GTIN（同上）。未登録時もエラーにせず `data: { exists: false }`（HTTP 200）を返す。D-03（コードスキャン）の新規登録判定専用（未登録は正常フローのため404を使わない、GCPログのノイズ削減） | 実装済 | FR-05、3-5〜3-7 |
 | `POST /api/scan` | 入出庫処理（`type: IN\|OUT`、`quantity`）。未登録品目は品目名・閾値・保管場所（＋ D-03 経由なら読み取った `gtin`）を伴って新規登録＋1点入庫（IN固定、OUT不可）。新規登録は登録経路によらずロック区間内で `ITM-` の最大連番+1 を採番し `data.itemId` で返す。`gtin` 指定時は登録前にロック区間内で重複登録がないか再確認する。出庫数量が現在在庫数を超える場合は `INSUFFICIENT_STOCK` | 実装済 | FR-06、FR-07、FR-12 |
 | `PUT /api/threshold` | 品目ごとの閾値更新（複数一括）。管理者のみ。`locks/inventory.lock` を取得して更新 | 実装済 | FR-08、3-8 |
 | `PUT /api/inventory/{itemId}/discontinued` | 廃番フラグ更新。管理者のみ。`locks/inventory.lock` を取得して更新 | 実装済 | FR-11、3-8 |
@@ -242,15 +244,15 @@ D-03 のクライアント（`getUserMedia` + ZXing-js）で読み取った文�
 | JANコード / EAN-13 | `4901234567894` | 13桁の先頭に `0` を付与し GTIN-14 化 | `04901234567894` | **GTIN**（品目の検索キー。itemId ではない） |
 | GS1 DataMatrix | `(01)04912345678904(17)...` | GS1 Application Identifier 構造から AI「01」（GTIN）を抽出 | `04912345678904` | **GTIN**（同上） |
 
-- **itemId（`ITM-`）と GTIN は別物**。自社発行QRを読んだ場合はその場で itemId が確定するが、JAN / GS1 DataMatrix を読んだ場合は GTIN しか分からない。クライアントは `GET /api/inventory/{value}`（`value` は itemId または GTIN のどちらでも可。4.6）を呼び、サーバが `InventoryMaster` の `itemId` 列 → `gtin` 列の順で検索して品目を特定する。応答の `data.itemId` が実在する itemId なので、以降の `POST /api/scan`（登録済み品目の入出庫）は必ずこの値を使う。
+- **itemId（`ITM-`）と GTIN は別物**。自社発行QRを読んだ場合はその場で itemId が確定するが、JAN / GS1 DataMatrix を読んだ場合は GTIN しか分からない。クライアントは `GET /api/inventory/{value}/exists`（`value` は itemId または GTIN のどちらでも可。4.6）を呼び、サーバが `InventoryMaster` の `itemId` 列 → `gtin` 列の順で検索して品目を特定する。`data.exists` が `true` の場合の `data.itemId` が実在する itemId なので、以降の `POST /api/scan`（登録済み品目の入出庫）は必ずこの値を使う。
 - 「平文をそのまま使用」は `ITM-` 形式に限る。**QR コード内に数字のみ（13 桁）がエンコードされていた場合は自社発行QRではなく JAN として扱い、先頭 `0` 付与で GTIN-14 化する**（GTIN は GTIN-14 で保持するため）。
 - **GS1 パーサの対応範囲**（クライアント実装 `src/app/utils/itemId.ts`）:
   - **AI `01`（GTIN）を抽出する**のが目的。
   - 同一文字列に含まれる他のAIは、GTIN を正しく取り出すために**構造として読み飛ばす**：固定長AI（`01`=14桁 / `11` `12` `13` `15` `17`=6桁 等）は桁数ぶん、可変長AI（`10` `21` 等）は FNC1(`\x1d`)または文字列末尾まで。値の中身は使わない。
   - **未知のAI（読み飛ばす桁数が判断できない）・`01` が見つからない・GTIN のチェックディジット不一致は例外**とし、誤った値を登録しない（要件10章）。
   - 実装は技術検証「検証4」の参考実装（`verification/04b_gs1_parser.mjs`）を土台に `src/` へ**書き起こす**。検証コード自体はリポジトリに取り込まない。
-- 品目が未登録（`ITEM_NOT_FOUND`）の場合、D-03 は読み取った GTIN を保持したまま新規登録フォームへ遷移し、`POST /api/scan` に `gtin` として渡す（`itemId` は渡さない。サーバが `ITM-` を採番。2.5）。自社発行QRの読み取り（登録済みのはずが未登録＝ラベル誤り等）では `gtin` は送らない。
-- サーバも受領した値の形式を再検証する：`itemId` は `^ITM-\d{6}$`、`GET /api/inventory/{value}` のパス値のみ GTIN（`^\d{14}$`）も許容（4.1）。
+- 品目が未登録（`data.exists === false`）の場合、D-03 は読み取った GTIN を保持したまま新規登録フォームへ遷移し、`POST /api/scan` に `gtin` として渡す（`itemId` は渡さない。サーバが `ITM-` を採番。2.5）。自社発行QRの読み取り（登録済みのはずが未登録＝ラベル誤り等）では `gtin` は送らない。
+- サーバも受領した値の形式を再検証する：`itemId` は `^ITM-\d{6}$`、`GET /api/inventory/{value}` および `GET /api/inventory/{value}/exists` のパス値のみ GTIN（`^\d{14}$`）も許容（4.1）。
 - 実機（iOS Safari / Android Chrome）での読み取り精度検証は `verification/`（git 管理外。technical_verification.md 0章）で継続する。
 
 ### 4.6 リクエスト／レスポンスのスキーマと入力検証
@@ -268,6 +270,7 @@ D-03 のクライアント（`getUserMedia` + ZXing-js）で読み取った文�
 | `PUT /api/users/{allowId}/password` | パス `allowId`（必須）、`newPassword`（必須 / 8–72 文字）、`newPasswordConfirm`（必須 / 一致）。管理者のみ。対象が存在しなければ `INVALID_INPUT` | `null` |
 | `GET /api/inventory` | なし（クエリでの絞り込みは任意） | `Item[]`（`itemId, gtin, itemName, currentStock, threshold, location, discontinuedFlag`） |
 | `GET /api/inventory/{itemId}` | パス値（`^ITM-\d{6}$` の itemId、または `^\d{14}$` の GTIN）。GTIN の場合は `gtin` 列で検索する | `Item`（`itemId` は実在するID。未登録は `ITEM_NOT_FOUND`） |
+| `GET /api/inventory/{itemId}/exists` | パス値（同上） | `{ exists: false }`、または `{ exists: true, itemId, itemName, currentStock }`。未登録もHTTP 200で返す |
 | `POST /api/scan` | `itemId`（既存品目時は必須 / `^ITM-\d{6}$`。新規登録時は送らない）、`type`（`"IN"` / `"OUT"`）、`quantity`（整数 ≥ 1）、新規登録時のみ `itemName`（必須 / 1–100）・`threshold`（整数 ≥ 0）・`location`（0–100）・`gtin`（任意 / `^\d{14}$`。D-03 のバーコード読み取り経由のみ）。新規登録時 `type` は `IN` 固定、`quantity` は 1 | `{ itemId, currentStock }`（`itemId` は新規登録時にサーバが採番した値） |
 | `PUT /api/threshold` | `items`（1件以上の配列、各 `{ itemId（形式検証）, threshold（整数 ≥ 0） }`） | `{ updated: number }` |
 | `PUT /api/inventory/{itemId}/discontinued` | `discontinued`（真偽値、必須） | `null` |
@@ -293,7 +296,7 @@ D-03 のクライアント（`getUserMedia` + ZXing-js）で読み取った文�
 | 在庫不足 | ロジック層（出庫の在庫チェック） | `INSUFFICIENT_STOCK` | HTTP 400。出庫数量が現在在庫数を超える場合は拒否し、在庫マスタ・履歴とも更新しない（FR-06。マイナス在庫を作らず、記録数量と実減算数量を一致させる）。ロックは取得済みなら解放する |
 | 排他ロックタイムアウト | ロジック層（`lock.ts`） | `LOCK_TIMEOUT` | HTTP 409。入出庫：待ち時間 5〜10 秒で取得できなければ、当該操作を蓄積データ（`pending/`）へ退避し「時差更新として受け付けた」旨を返す（FR-14）。**新規品目登録・閾値設定・廃番フラグ更新：退避せずエラーを返し、再実行を促す（時差更新の対象外）** |
 | スプレッドシート更新失敗 | データアクセス層 | `SHEET_WRITE_FAILED` | HTTP 502。ロック内で書き込みに失敗した入出庫は、`operationId` 付きで蓄積データへ退避し時差更新対象とする（FR-15）。履歴追記を先に確定してから在庫マスタを更新する順序とし、部分失敗時の二重計上を `operationId` の冪等判定で防ぐ（[sequence.md](sequence.md) 2.1 / 2.6） |
-| 品目未登録 | 品目取得 | `ITEM_NOT_FOUND` | HTTP 404。D-03 は新規登録フォームへ分岐（画面分岐用の参考情報。登録可否は `POST /api/scan` 内で再判定） |
+| 品目未登録 | 品目取得（`GET /api/inventory/{itemId}`） | `ITEM_NOT_FOUND` | HTTP 404。D-03 は `GET /api/inventory/{itemId}/exists`（未登録もHTTP 200で `exists: false`を返す）で判定するため、この404は使わない。`POST /api/scan` の入出庫（既存品目扱い）でitemIdが見つからない場合等、業務上の異常系でのみ発生する |
 | アラートメール送信失敗 | ロジック層（`alert.ts`） | （握りつぶし） | 在庫更新は確定済みのため成功として返す。送信失敗（Gmail 上限 HTTP 429 を含む）は `pending/alerts/{itemId}.json` に退避し、当日は再送しない。管理者ログイン時にまとめて送信する（FR-09、4.4 / 6.4）。エラー詳細はサーバログのみ |
 | 通信失敗（クライアント） | `$fetch` | - | クライアントでリトライ導線を表示（要件10章「通信失敗」） |
 | 想定外例外 | 全層 | `INTERNAL_ERROR` | HTTP 500。スタックはサーバログのみ、ユーザには汎用メッセージ。DB更新を伴う処理はロック解放を `finally` で保証する |
@@ -372,7 +375,7 @@ D-03 のクライアント（`getUserMedia` + ZXing-js）で読み取った文�
 - 対策:
   - **バッチ集約**: 在庫マスタの読み取りは `spreadsheets.values.batchGet`、更新は `spreadsheets.values.batchUpdate` を用い、1操作あたりのリクエスト数を最小化する（在庫マスタの `currentStock` / `updatedAt` / `alertSentFlag` の複数セル更新、閾値の複数行一括更新を1リクエストにまとめる）。
   - **`deferred-sync` のレート制御**: 1件ずつロック→更新するループに、1件あたりの待機と、`RESOURCE_EXHAUSTED` 捕捉時の指数バックオフを入れる。1分あたりのリクエストが上限に収まらない場合は、処理を打ち切って残件を保持し再実行を促す（既存仕様と同じ）。
-  - **在庫マスタの短TTLキャッシュ**: データアクセス層に数秒程度のインメモリキャッシュを置き、`GET /api/inventory` / `GET /api/inventory/{itemId}` の連続読み取りを抑える。ロック区間内で在庫マスタを更新したらキャッシュを無効化する（`max-instances=1` のため単一インスタンスで完結）。
+  - **在庫マスタの短TTLキャッシュ**: データアクセス層に数秒程度のインメモリキャッシュを置き、`GET /api/inventory` / `GET /api/inventory/{itemId}` / `GET /api/inventory/{itemId}/exists` の連続読み取りを抑える。ロック区間内で在庫マスタを更新したらキャッシュを無効化する（`max-instances=1` のため単一インスタンスで完結）。
   - **在庫マスタの行検索**: `itemId`（該当なければ `gtin`）での検索は「シート全体を 1 回 `values.get` / `batchGet` で読み、JS 側で線形探索」でよい。品目数は数百規模、payload は数十KB、線形探索のコストは誤差。行番号インデックスや索引シートは持たない。更新は探した行番号へ `batchUpdate`。ロック区間内で「行検索 → 更新」を一連で行うため、検索と更新の間で行がずれることはない（管理者の直接編集は要件10章で運用回避）。
 
 ### 6.8 既知の制限事項

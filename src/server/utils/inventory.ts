@@ -42,12 +42,20 @@ export async function listInventory(): Promise<InventoryRow[]> {
 }
 
 /**
+ * itemId列 → gtin列 の順で品目を検索する。未登録ならnullを返す（存在確認用、404を伴わない）
+ */
+export async function findItemByIdOrGtin(value: string): Promise<InventoryRow | null> {
+  const found = await findInventoryRowIndex(value)
+  return found ? found.row : null
+}
+
+/**
  * itemId列 → gtin列 の順で品目を検索する。未登録ならITEM_NOT_FOUNDを投げる（FR-05）
  */
 export async function getItemByIdOrGtin(value: string): Promise<InventoryRow> {
-  const found = await findInventoryRowIndex(value)
-  if (!found) throw new ApiError('ITEM_NOT_FOUND', '品目が見つかりません')
-  return found.row
+  const row = await findItemByIdOrGtin(value)
+  if (!row) throw new ApiError('ITEM_NOT_FOUND', '品目が見つかりません')
+  return row
 }
 
 /**
