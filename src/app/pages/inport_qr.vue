@@ -60,6 +60,10 @@ async function startScanning() {
       BarcodeFormat.EAN_13,
       BarcodeFormat.DATA_MATRIX,
     ])
+    // JAN(EAN-13)は水平スキャンのみでは縦向き提示時に読めないため、
+    // 90度回転しての再試行(TRY_HARDER)を有効化する。QR/DataMatrixは
+    // ファインダーパターンで自己回転検出されるため影響を受けない。
+    hints.set(DecodeHintType.TRY_HARDER, true)
     codeReader = new BrowserMultiFormatReader(hints)
   }
 
