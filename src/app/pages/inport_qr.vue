@@ -50,22 +50,32 @@ function stopScanning() {
 async function startScanning() {
   errorMessage.value = ''
   state.value = 'scanning'
-  await nextTick()
-  if (!videoRef.value) return
 
-  if (!codeReader) {
-    const hints = new Map()
-    hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-      BarcodeFormat.QR_CODE,
-      BarcodeFormat.EAN_13,
-      BarcodeFormat.DATA_MATRIX,
-    ])
-    // JAN(EAN-13)は水平スキャンのみでは縦向き提示時に読めないため、
-    // 90度回転しての再試行(TRY_HARDER)を有効化する。QR/DataMatrixは
-    // ファインダーパターンで自己回転検出されるため影響を受けない。
-    hints.set(DecodeHintType.TRY_HARDER, true)
-    codeReader = new BrowserMultiFormatReader(hints)
+  try {
+    await nextTick()
+    if (!videoRef.value) return
+
+    if (!codeReader) {
+      const hints = new Map()
+      hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+        BarcodeFormat.QR_CODE,
+        BarcodeFormat.EAN_13,
+        BarcodeFormat.DATA_MATRIX,
+      ])
+      // JAN(EAN-13)は水平スキャンのみでは縦向き提示時に読めないため、
+      // 90度回転しての再試行(TRY_HARDER)を有効化する。QR/DataMatrixは
+      // ファインダーパターンで自己回転検出されるため影響を受けない。
+      hints.set(DecodeHintType.TRY_HARDER, true)
+      codeReader = new BrowserMultiFormatReader(hints)
+    }
+  } catch (e) {
+    console.error('スキャン画面の初期化に失敗しました', e)
+    errorMessage.value = '読み取り機能の初期化に失敗しました。画面を再読み込みしてください。'
+    state.value = 'error'
+    return
   }
+
+  if (!videoRef.value || !codeReader) return
 
   try {
     controls = await codeReader.decodeFromConstraints(
