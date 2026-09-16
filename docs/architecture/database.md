@@ -62,7 +62,7 @@
 | C | 更新年月日(updatedAt) | 日時 | ○ | |
 
 > 品目ごとの紐付けは行わず、登録済み全アドレスへ一律通知
-> `AllowList.targetId`（D列）が値を持つ行は、その `targetId` を持つ本シートの行と対応する（アラート受信者。管理者判定には用いない。管理者は `AllowList.adminFlag`（F列）で判定）
+> `AllowList.targetId`（D列）が値を持つ行は、その `targetId` を持つ本シートの行と対応する（アラート受信者。管理者判定には用いない。管理者は `AllowList.adminFlag`（F列）で判定）。D列は `POST`/`DELETE /api/notification-targets` がメールアドレス一致で自動的に反映・クリアするため、削除可否には影響しない（4章参照）
 
 ## 4. 許可リストシート（`AllowList`）
 
@@ -71,7 +71,7 @@
 | A | 許可ID(allowId) | 文字列 | ○ | 一意 |
 | B | 許可メールアドレス(email) | 文字列 | ○ | ログイン照合キー |
 | C | パスワード(passwordHash) | 文字列 | ○ | bcryptjsによる暗号化済み文字列（要件定義7.4、FR-01）。平文は保存しない（＝画面での平文表示は不可）。本人は `PUT /api/user/password`、管理者は `PUT /api/users/{allowId}/password` で再ハッシュ更新（FR-13、3-10）。初回登録は `npm run hash-password` で生成したハッシュを直接記入（要件3-1） |
-| D | 通知先ID(targetId) | 文字列 | 条件付 | 管理者がアラートメールの受信も兼ねる場合に `NotificationTargets.targetId`（`TAR-NNN`）の値を設定。空白可。管理者判定には用いない（通知先への紐付け専用） |
+| D | 通知先ID(targetId) | 文字列 | 条件付 | 同一メールアドレスが `NotificationTargets` に登録されている場合の `targetId`（`TAR-NNN`）。`POST /api/notification-targets` 追加時・`DELETE /api/notification-targets` 削除時にメールアドレス一致でロジック層が自動的に反映・クリアする（手動編集は不要）。空白可。管理者判定には用いない（通知先への紐付け専用。削除可否にも影響しない） |
 | E | 退職フラグ(retiredFlag) | 真偽値 | ○ | trueの場合ログイン拒否 |
 | F | 管理者フラグ(adminFlag) | 真偽値 | ○ | trueの場合、管理者ユーザと判断 |
 | G | 更新年月日(updatedAt) | 日時 | ○ | |

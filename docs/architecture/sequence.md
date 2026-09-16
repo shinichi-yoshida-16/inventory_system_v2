@@ -424,37 +424,37 @@ sequenceDiagram
         API-->>FE: status:OK, data
         FE-->>U: 通知先メールアドレス一覧を表示
 
-        U->>FE: メールアドレス入力 → 追加
+        U->>FE: 表内の通知先チェックボックスをONにする（許可リストにない任意のメールアドレスの登録は別システムで行うため、この画面では行えない）
         FE->>API: POST /api/notification-targets { email }（x-session-id）
         API->>API: 管理者判定（再チェック）／入力検証（メール形式・≤254・重複不可）
         API->>Logic: 追加を委譲
         Logic->>Lock: acquireLock("locks/inventory.lock")
         Lock-->>Logic: ロック取得
         Logic->>Logic: targetId 採番（`TAR-` の最大連番+1、[database.md](database.md) 冒頭）
-        Logic->>DAO: NotificationTargets へ新規行追加
+        Logic->>DAO: NotificationTargets のA列が空の最初の行(無ければ末尾)へ新規行を明示的に書き込み
+        DAO->>SS: 書き込み
+        Logic->>DAO: AllowList をメールアドレスで検索しtargetId(D列)を更新（該当行があれば）
         DAO->>SS: 書き込み
         Logic->>Lock: releaseLock
         API-->>FE: status:OK, data（targetId, email）
         FE-->>U: 一覧を更新表示
 
-        U->>FE: 対象アドレスの削除を選択
+        U->>FE: 表内の通知先チェックボックスをOFFにする
         FE->>API: DELETE /api/notification-targets { targetId }（x-session-id）
         API->>API: 管理者判定（再チェック）
-        alt AllowList.targetId から参照中
-            API-->>FE: status:ERROR, code:INVALID_INPUT（管理者に紐付く通知先は削除不可）
-        else 未参照
-            API->>Logic: 削除を委譲
-            Logic->>Lock: acquireLock("locks/inventory.lock")
-            Lock-->>Logic: ロック取得
-            Logic->>DAO: NotificationTargets 該当行を削除
-            DAO->>SS: 書き込み
-            Logic->>Lock: releaseLock
-            API-->>FE: status:OK
-            FE-->>U: 一覧を更新表示
-        end
+        API->>Logic: 削除を委譲
+        Logic->>Lock: acquireLock("locks/inventory.lock")
+        Lock-->>Logic: ロック取得
+        Logic->>DAO: NotificationTargets 該当行を削除
+        DAO->>SS: 書き込み
+        Logic->>DAO: AllowList をtargetIdで検索しtargetId(D列)を空欄に更新（該当行があれば）
+        DAO->>SS: 書き込み
+        Logic->>Lock: releaseLock
+        API-->>FE: status:OK
+        FE-->>U: 一覧を更新表示
     end
 ```
 
-- `POST /api/notification-targets` は `locks/inventory.lock` を取得してから `targetId`（`TAR-` の3桁連番）を採番する（[overview.md](overview.md) 6.1、[database.md](database.md) 冒頭「ID の採番規則」）。
-- `DELETE /api/notification-targets` は、削除対象の `targetId` が `AllowList.targetId`（D列）から参照されている場合は `INVALID_INPUT` で拒否する（ユーザのアラート受信先紐付けが失われるため、[overview.md](overview.md) 4.6）。
+- `POST /api/notification-targets` は `locks/inventory.lock` を取得してから `targetId`（`TAR-` の3桁連番）を採番し、`NotificationTargets` シートへ書き込む。書き込み先の行は `values.append` の自動テーブル検出（シート末尾の残存データに影響されうる）ではなく、A列(targetId)を読み取り「最初にA列が空になる行」を自前で計算して明示的に指定する（無ければ既存データの直後）（[overview.md](overview.md) 6.1、[database.md](database.md) 冒頭「ID の採番規則」）。追加後、`AllowList` に同一メールアドレスの行があれば、その `targetId`（D列）にも同じ値を反映する（メールアドレスで対応付け）。
+- `DELETE /api/notification-targets` は無条件で該当行を削除する（管理者との紐付けによる削除拒否は行わない。管理者判定は `AllowList.adminFlag`（F列）のみで行うため、D列は削除可否に影響しない）。削除後、`AllowList` の `targetId`（D列）が削除対象の値を参照していた行があれば、その値を空欄に更新する。
 - ロック取得・解放のパラメータ（リトライ・タイムアウト・スタックロック対策）は 2.3 / [overview.md](overview.md) 6.1 と共通。

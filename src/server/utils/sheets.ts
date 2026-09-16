@@ -46,7 +46,6 @@ const INVENTORY_RANGE = 'InventoryMaster!A2:I'
 const TRANSACTION_RANGE = 'TransactionLog!A2:G'
 const TRANSACTION_APPEND_RANGE = 'TransactionLog!A:G'
 const NOTIFICATION_RANGE = 'NotificationTargets!A2:C'
-const NOTIFICATION_APPEND_RANGE = 'NotificationTargets!A:C'
 const ALLOWLIST_RANGE = 'AllowList!A2:G'
 
 let sheetsClient: sheets_v4.Sheets | null = null
@@ -273,11 +272,13 @@ export async function getNotificationTargets(): Promise<NotificationTargetRow[]>
     spreadsheetId: config.googleSpreadsheetId,
     range: NOTIFICATION_RANGE,
   })
-  return (res.data.values || []).map((row) => ({
-    targetId: String(row[0] ?? ''),
-    email: String(row[1] ?? ''),
-    updatedAt: String(row[2] ?? ''),
-  }))
+  return (res.data.values || [])
+    .filter((row) => row[0])
+    .map((row) => ({
+      targetId: String(row[0] ?? ''),
+      email: String(row[1] ?? ''),
+      updatedAt: String(row[2] ?? ''),
+    }))
 }
 
 /**
@@ -293,12 +294,26 @@ export async function getMaxTargetIdSeq(): Promise<number> {
   return max
 }
 
+/**
+ * NotificationTargetsへ1行追記する（values.appendの自動テーブル検出は使わず、
+ * 実データの直後の行を自前で計算して書き込む。シート末尾に残存データがあっても
+ * その手前の空き行に追記されるようにするため）
+ */
 export async function appendNotificationTarget(target: NotificationTargetRow): Promise<void> {
   const sheets = await getSheetsClient()
   const config = useRuntimeConfig()
-  await sheets.spreadsheets.values.append({
+  const res = await sheets.spreadsheets.values.get({
     spreadsheetId: config.googleSpreadsheetId,
-    range: NOTIFICATION_APPEND_RANGE,
+    range: NOTIFICATION_RANGE,
+  })
+  const rows = res.data.values || []
+  const emptyIndex = rows.findIndex((row) => !row[0])
+  const dataIndex = emptyIndex === -1 ? rows.length : emptyIndex
+  const sheetRow = dataIndex + 2 // A2始まり(ヘッダーがrow1) → 実際のシート行番号
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: config.googleSpreadsheetId,
+    range: `NotificationTargets!A${sheetRow}:C${sheetRow}`,
     valueInputOption: 'RAW',
     requestBody: { values: [[target.targetId, target.email, target.updatedAt]] },
   })
@@ -326,7 +341,7 @@ export async function deleteNotificationTarget(targetId: string): Promise<boolea
       requests: [
         {
           deleteDimension: {
-            range: { sheetId, dimension: 'ROWS', startIndex: sheetRow + 1, endIndex: sheetRow + 2 },
+            range: { sheetId, dimension: 'ROWS', startIndex: sheetRow, endIndex: sheetRow + 1 },
           },
         },
       ],
@@ -375,6 +390,36 @@ export async function findUserByEmail(email: string): Promise<AllowListRow | nul
 export async function findUserByAllowId(allowId: string): Promise<AllowListRow | null> {
   const users = await getUsers()
   return users.find((u) => u.allowId === allowId) || null
+}
+
+/**
+ * AllowListの該当行(メールアドレスで特定)のtargetId・更新年月日を更新する
+ */
+export async function updateUserTargetId(email: string, targetId: string, updatedAt: string): Promise<boolean> {
+  const sheets = await getSheetsClient()
+  const config = useRuntimeConfig()
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: config.googleSpreadsheetId,
+    range: ALLOWLIST_RANGE,
+  })
+  const rows = res.data.values || []
+  const index = rows.findIndex((row) => String(row[1] ?? '') === email)
+  if (index === -1) return false
+
+  const sheetRow = index + 2
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: config.googleSpreadsheetId,
+    range: `AllowList!D${sheetRow}:D${sheetRow}`,
+    valueInputOption: 'RAW',
+    requestBody: { values: [[targetId]] },
+  })
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: config.googleSpreadsheetId,
+    range: `AllowList!G${sheetRow}:G${sheetRow}`,
+    valueInputOption: 'RAW',
+    requestBody: { values: [[updatedAt]] },
+  })
+  return true
 }
 
 /**

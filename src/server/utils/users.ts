@@ -6,7 +6,6 @@ export interface UserSummary {
   allowId: string
   email: string
   isAdmin: boolean
-  retiredFlag: boolean
   updatedAt: string
 }
 
@@ -34,17 +33,19 @@ export async function authenticate(email: string, password: string) {
 }
 
 /**
- * 許可リスト一覧を取得する（パスワードハッシュは含めない。管理者のみが呼ぶ、3-10）
+ * 許可リスト一覧を取得する（パスワードハッシュは含めない。管理者のみが呼ぶ、3-10）。
+ * 退職済みユーザは表示しない（退職有無は別システムで管理するため）
  */
 export async function listUsers(): Promise<UserSummary[]> {
   const rows = await getUsers()
-  return rows.map((r) => ({
-    allowId: r.allowId,
-    email: r.email,
-    isAdmin: isAdminRow(r),
-    retiredFlag: r.retiredFlag,
-    updatedAt: r.updatedAt,
-  }))
+  return rows
+    .filter((r) => !r.retiredFlag)
+    .map((r) => ({
+      allowId: r.allowId,
+      email: r.email,
+      isAdmin: isAdminRow(r),
+      updatedAt: r.updatedAt,
+    }))
 }
 
 /**

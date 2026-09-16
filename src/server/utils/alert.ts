@@ -128,7 +128,9 @@ export async function addNotificationTarget(email: string): Promise<{ targetId: 
       throw new ApiError('INVALID_INPUT', 'すでに登録されているメールアドレスです')
     }
     const targetId = formatTargetId((await getMaxTargetIdSeq()) + 1)
-    await appendNotificationTarget({ targetId, email, updatedAt: nowIso() })
+    const updatedAt = nowIso()
+    await appendNotificationTarget({ targetId, email, updatedAt })
+    await updateUserTargetId(email, targetId, updatedAt)
     return { targetId, email }
   })
 
@@ -139,12 +141,16 @@ export async function addNotificationTarget(email: string): Promise<{ targetId: 
 }
 
 export async function removeNotificationTarget(targetId: string): Promise<void> {
-  const allowRows = await getUsers()
-  if (allowRows.some((u) => u.targetId === targetId)) {
-    throw new ApiError('INVALID_INPUT', '管理者に紐付いているため削除できません')
-  }
-
-  const result = await withLock(async () => deleteNotificationTarget(targetId))
+  const result = await withLock(async () => {
+    const deleted = await deleteNotificationTarget(targetId)
+    if (deleted) {
+      const linkedUser = (await getUsers()).find((u) => u.targetId === targetId)
+      if (linkedUser) {
+        await updateUserTargetId(linkedUser.email, '', nowIso())
+      }
+    }
+    return deleted
+  })
 
   if (result === null) {
     throw new ApiError('LOCK_TIMEOUT', '排他ロックを取得できませんでした。再実行してください')

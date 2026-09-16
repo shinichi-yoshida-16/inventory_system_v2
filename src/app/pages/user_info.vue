@@ -6,7 +6,6 @@ interface UserSummary {
   allowId: string
   email: string
   isAdmin: boolean
-  retiredFlag: boolean
   updatedAt: string
 }
 interface NotificationTarget {
@@ -17,7 +16,6 @@ interface MergedUserRow {
   allowId: string | null
   email: string
   isAdmin: boolean
-  retiredFlag: boolean
   targetId: string | null
 }
 
@@ -66,7 +64,6 @@ const loadUsers = async () => {
 
 // 管理者: 通知先設定
 const targets = ref<NotificationTarget[]>([])
-const newTargetEmail = ref('')
 const targetError = ref('')
 
 const loadTargets = async () => {
@@ -93,14 +90,13 @@ const mergedRows = computed<MergedUserRow[]>(() => {
       allowId: u.allowId,
       email: u.email,
       isAdmin: u.isAdmin,
-      retiredFlag: u.retiredFlag,
       targetId: target?.targetId ?? null,
     }
   })
 
   for (const target of targets.value) {
     if (rows.some((r) => r.email === target.email)) continue
-    rows.push({ allowId: null, email: target.email, isAdmin: false, retiredFlag: false, targetId: target.targetId })
+    rows.push({ allowId: null, email: target.email, isAdmin: false, targetId: target.targetId })
   }
 
   return rows
@@ -136,16 +132,6 @@ const handleResetPassword = async () => {
   }
 }
 
-const handleAddTarget = async () => {
-  targetError.value = ''
-  try {
-    await apiFetch('/api/notification-targets', { method: 'POST', body: { email: newTargetEmail.value } })
-    newTargetEmail.value = ''
-    await loadTargets()
-  } catch (e) {
-    targetError.value = e instanceof Error ? e.message : '追加に失敗しました'
-  }
-}
 </script>
 
 <template>
@@ -172,7 +158,6 @@ const handleAddTarget = async () => {
             <th>許可ID</th>
             <th>メールアドレス</th>
             <th class="col-center">管理者</th>
-            <th class="col-center">退職</th>
             <th class="col-center">通知先</th>
           </tr>
         </thead>
@@ -181,7 +166,6 @@ const handleAddTarget = async () => {
             <td data-label="許可ID">{{ row.allowId ?? '-' }}</td>
             <td data-label="メールアドレス">{{ row.email }}</td>
             <td class="col-center" data-label="管理者">{{ row.isAdmin ? '○' : '' }}</td>
-            <td class="col-center" data-label="退職">{{ row.retiredFlag ? '○' : '' }}</td>
             <td class="col-center" data-label="通知先">
               <input type="checkbox" :checked="!!row.targetId" @change="handleToggleTarget(row)" />
             </td>
@@ -190,8 +174,6 @@ const handleAddTarget = async () => {
       </table>
     </div>
 
-    <input v-model="newTargetEmail" type="email" placeholder="通知先メールアドレス（許可リストにないアドレスを追加）" />
-    <button @click="handleAddTarget">追加</button>
     <p v-if="targetError" style="color: red">{{ targetError }}</p>
 
     <h3>パスワードのリセット</h3>

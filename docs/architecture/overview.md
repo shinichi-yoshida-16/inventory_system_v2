@@ -207,7 +207,7 @@ graph LR
 | `POST /api/auth/logout` | セッション破棄 | 実装済 | 3-3 |
 | `GET /api/auth/user` | セッション検証・有効期限の延長 | 実装済 | 3-3 |
 | `PUT /api/user/password` | ログイン中ユーザのパスワード更新（bcryptjs 再ハッシュ） | 実装済 | FR-13、3-10 |
-| `GET /api/users` | 許可リスト一覧の取得（`allowId` / メールアドレス / 管理者判定 / 退職フラグ / 更新年月日。パスワードハッシュは返さない）。管理者のみ | 実装済 | 3-10、FR-13 |
+| `GET /api/users` | 許可リスト一覧の取得（`allowId` / メールアドレス / 管理者判定 / 更新年月日。パスワードハッシュは返さない）。退職フラグtrueの行は除外（退職有無は別システムで管理するため）。管理者のみ | 実装済 | 3-10、FR-13 |
 | `PUT /api/users/{allowId}/password` | 管理者が対象ユーザのパスワードをリセット（新パスワードを bcryptjs でハッシュ化し `AllowList` を更新）。管理者のみ | 実装済 | 3-10、FR-13 |
 | `GET /api/inventory` | 在庫一覧取得（品目ID・GTIN・品目名・現在在庫数・閾値・アラート送信済みフラグ・保管場所・廃番フラグ・更新年月日） | 実装済 | FR-02、3-4 |
 | `GET /api/inventory/{itemId}` | 品目単体取得。パス値は itemId（`ITM-xxxxxx`）または GTIN（14桁）のどちらでも可（4.5 / 4.6）。未登録時は `code: ITEM_NOT_FOUND` | 実装済 | FR-05、3-5〜3-7 |
@@ -215,7 +215,7 @@ graph LR
 | `POST /api/scan` | 入出庫処理（`type: IN\|OUT`、`quantity`）。未登録品目は品目名・閾値・保管場所（＋ D-03 経由なら読み取った `gtin`）を伴って新規登録＋1点入庫（IN固定、OUT不可）。新規登録は登録経路によらずロック区間内で `ITM-` の最大連番+1 を採番し `data.itemId` で返す。`gtin` 指定時は登録前にロック区間内で重複登録がないか再確認する。出庫数量が現在在庫数を超える場合は `INSUFFICIENT_STOCK` | 実装済 | FR-06、FR-07、FR-12 |
 | `PUT /api/threshold` | 品目ごとの閾値更新（複数一括）。管理者のみ。`locks/inventory.lock` を取得して更新 | 実装済 | FR-08、3-8 |
 | `PUT /api/inventory/{itemId}/discontinued` | 廃番フラグ更新。管理者のみ。`locks/inventory.lock` を取得して更新 | 実装済 | FR-11、3-8 |
-| `GET /api/notification-targets` / `POST` / `DELETE` | 通知先メールアドレスの参照・追加・削除。管理者のみ。`POST` は `locks/inventory.lock` を取得し `targetId` を `TAR-` の3桁連番（`TAR-001`〜）で採番。`AllowList.targetId` はこの値を参照してユーザをアラート受信者に紐付ける（管理者判定には用いない） | 実装済 | FR-09、3-9 |
+| `GET /api/notification-targets` / `POST` / `DELETE` | 通知先メールアドレスの参照・追加・削除。管理者のみ。`POST` は `locks/inventory.lock` を取得し `targetId` を `TAR-` の3桁連番（`TAR-001`〜）で採番し末尾に追記、`DELETE` は無条件で該当行を削除。いずれもメールアドレス一致で `AllowList.targetId` を自動的に反映・クリアする（管理者判定には用いない。削除可否にも影響しない） | 実装済 | FR-09、3-9 |
 | `POST /api/deferred-sync` | 蓄積データ（`pending/` 直下）を名前順に後追い適用。管理者のみ。`pending/alerts/` は対象外 | 実装済 | FR-15、3-12 |
 
 ### 4.3 QRコード発行（D-04）
@@ -266,7 +266,7 @@ D-03 のクライアント（`getUserMedia` + ZXing-js）で読み取った文�
 | `POST /api/auth/logout` | なし | `null` |
 | `GET /api/auth/user` | なし | `{ user: { email, isAdmin } }` |
 | `PUT /api/user/password` | `newPassword`（必須 / 8–72 文字）、`newPasswordConfirm`（必須 / 一致） | `null` |
-| `GET /api/users` | なし（管理者のみ） | `{ allowId, email, isAdmin, retiredFlag, updatedAt }[]`（パスワードハッシュは含めない。退職者・管理者自身も含む全件） |
+| `GET /api/users` | なし（管理者のみ） | `{ allowId, email, isAdmin, updatedAt }[]`（パスワードハッシュは含めない。管理者自身は含むが、退職フラグtrueの行は除外） |
 | `PUT /api/users/{allowId}/password` | パス `allowId`（必須）、`newPassword`（必須 / 8–72 文字）、`newPasswordConfirm`（必須 / 一致）。管理者のみ。対象が存在しなければ `INVALID_INPUT` | `null` |
 | `GET /api/inventory` | なし（クエリでの絞り込みは任意） | `Item[]`（`itemId, gtin, itemName, currentStock, threshold, location, discontinuedFlag`） |
 | `GET /api/inventory/{itemId}` | パス値（`^ITM-\d{6}$` の itemId、または `^\d{14}$` の GTIN）。GTIN の場合は `gtin` 列で検索する | `Item`（`itemId` は実在するID。未登録は `ITEM_NOT_FOUND`） |
@@ -276,7 +276,7 @@ D-03 のクライアント（`getUserMedia` + ZXing-js）で読み取った文�
 | `PUT /api/inventory/{itemId}/discontinued` | `discontinued`（真偽値、必須） | `null` |
 | `GET /api/notification-targets` | なし | `{ targetId, email }[]` |
 | `POST /api/notification-targets` | `email`（必須 / メール形式 / ≤254 / 重複不可） | `{ targetId, email }` |
-| `DELETE /api/notification-targets` | `targetId`（必須。`AllowList` から参照中の場合は `INVALID_INPUT` で拒否） | `null` |
+| `DELETE /api/notification-targets` | `targetId`（必須） | `null` |
 | `POST /api/deferred-sync` | なし | `{ applied: number, remaining: number }` |
 
 - `POST /api/scan` の出庫で `quantity > currentStock` の場合は `INSUFFICIENT_STOCK`（HTTP 400、5章）。
