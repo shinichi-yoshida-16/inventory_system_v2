@@ -196,7 +196,7 @@ graph LR
 - すべての業務APIは、`x-session-id` ヘッダのセッションIDを API層で検証する（`validateSession`）。無効時は `code: SESSION_INVALID` を返し、クライアントは D-00 へ強制遷移する（要件3-3）。
 - 成功時は `{ status: "OK", data: ... }`、失敗時は `{ status: "ERROR", code: ..., message: ... }` を基本形とする（`code` は 4.2 / 5章のコード表に従う）。リクエスト／レスポンスのボディ構造と項目バリデーションは 4.6 に定める。
 - 操作者は「セッションに紐づくメールアドレス」をサーバ側で解決し、クライアントからは受け取らない（なりすまし面の縮小、FR-06 / FR-07）。
-- 管理者専用API（`PUT /api/threshold`、`PUT /api/inventory/{itemId}/discontinued`、`GET/POST/DELETE /api/notification-targets`、`POST /api/deferred-sync`、`GET /api/users`、`PUT /api/users/{allowId}/password`）は、API層で `x-session-id` から `AllowList` 行を再解決し `targetId` の有無で管理者判定を行う。クライアント（`useAuth` の管理者フラグ）は信頼しない。非管理者の呼び出しは `code: PERMISSION_DENIED`（HTTP 403）。
+- 管理者専用API（`PUT /api/threshold`、`PUT /api/inventory/{itemId}/discontinued`、`GET/POST/DELETE /api/notification-targets`、`POST /api/deferred-sync`、`GET /api/users`、`PUT /api/users/{allowId}/password`）は、API層で `x-session-id` から `AllowList` 行を再解決し `adminFlag`（F列）で管理者判定を行う。クライアント（`useAuth` の管理者フラグ）は信頼しない。非管理者の呼び出しは `code: PERMISSION_DENIED`（HTTP 403）。
 - `itemId` はサーバ側でも形式を再検証する（`^ITM-\d{6}$`）。`GET /api/inventory/{itemId}` および `GET /api/inventory/{itemId}/exists` のパス値のみ、GTIN での検索を許すため `^\d{14}$` も許容する（4.6）。GS1 / JAN の解析・正規化はクライアントで行う（4.5）ため、サーバは受領値を信頼せず検証してから使用する。
 
 ### 4.2 エンドポイント一覧
@@ -215,7 +215,7 @@ graph LR
 | `POST /api/scan` | 入出庫処理（`type: IN\|OUT`、`quantity`）。未登録品目は品目名・閾値・保管場所（＋ D-03 経由なら読み取った `gtin`）を伴って新規登録＋1点入庫（IN固定、OUT不可）。新規登録は登録経路によらずロック区間内で `ITM-` の最大連番+1 を採番し `data.itemId` で返す。`gtin` 指定時は登録前にロック区間内で重複登録がないか再確認する。出庫数量が現在在庫数を超える場合は `INSUFFICIENT_STOCK` | 実装済 | FR-06、FR-07、FR-12 |
 | `PUT /api/threshold` | 品目ごとの閾値更新（複数一括）。管理者のみ。`locks/inventory.lock` を取得して更新 | 実装済 | FR-08、3-8 |
 | `PUT /api/inventory/{itemId}/discontinued` | 廃番フラグ更新。管理者のみ。`locks/inventory.lock` を取得して更新 | 実装済 | FR-11、3-8 |
-| `GET /api/notification-targets` / `POST` / `DELETE` | 通知先メールアドレスの参照・追加・削除。管理者のみ。`POST` は `locks/inventory.lock` を取得し `targetId` を `TAR-` の3桁連番（`TAR-001`〜）で採番。`AllowList.targetId` はこの値を参照して管理者に紐付く | 実装済 | FR-09、3-9 |
+| `GET /api/notification-targets` / `POST` / `DELETE` | 通知先メールアドレスの参照・追加・削除。管理者のみ。`POST` は `locks/inventory.lock` を取得し `targetId` を `TAR-` の3桁連番（`TAR-001`〜）で採番。`AllowList.targetId` はこの値を参照してユーザをアラート受信者に紐付ける（管理者判定には用いない） | 実装済 | FR-09、3-9 |
 | `POST /api/deferred-sync` | 蓄積データ（`pending/` 直下）を名前順に後追い適用。管理者のみ。`pending/alerts/` は対象外 | 実装済 | FR-15、3-12 |
 
 ### 4.3 QRコード発行（D-04）

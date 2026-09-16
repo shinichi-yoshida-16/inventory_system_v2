@@ -52,7 +52,7 @@ sequenceDiagram
         opt 管理者 かつ pending/alerts/ にマージ対象あり
             Logic->>DAO: pending/alerts/ を取得し、保留分を1通にまとめて通知先へ送信<br/>送信成功で対象 itemId の alertSentFlag=true にし pending/alerts/ を削除（FR-09、overview.md 4.4 / 6.4）
         end
-        Logic-->>API: sessionId, user（email / 管理者判定=targetId 有無）
+        Logic-->>API: sessionId, user（email / 管理者判定=adminFlag）
         API-->>FE: status:OK, data:{ sessionId, user }
         FE->>Auth: sessionId・user を useState に保持
         FE-->>U: D-01 ダッシュボードへ遷移
@@ -287,7 +287,7 @@ sequenceDiagram
     Note over FE: pending/ に蓄積データがある場合のみ<br/>時差更新ボタンを活性化（transition.md 3章）
     Adm->>FE: 時差更新ボタン押下
     FE->>API: POST /api/deferred-sync（x-session-id）
-    API->>API: validateSession → AllowList 再解決で管理者判定（targetId 有無）
+    API->>API: validateSession → AllowList 再解決で管理者判定（adminFlag）
     alt 非管理者
         API-->>FE: status:ERROR, code:PERMISSION_DENIED（HTTP 403）
     else 管理者
@@ -369,7 +369,7 @@ sequenceDiagram
         API->>Logic: 一覧取得を委譲
         Logic->>DAO: AllowList 全行取得
         DAO->>SS: 読み取り
-        Logic-->>API: allowId / email / isAdmin(targetId有無) / retiredFlag / updatedAt（passwordHash は除外）
+        Logic-->>API: allowId / email / isAdmin(adminFlag) / retiredFlag / updatedAt（passwordHash は除外）
         API-->>FE: status:OK, data（ハッシュを含めない）
         FE-->>U: メールアドレス一覧を表示
 
@@ -456,5 +456,5 @@ sequenceDiagram
 ```
 
 - `POST /api/notification-targets` は `locks/inventory.lock` を取得してから `targetId`（`TAR-` の3桁連番）を採番する（[overview.md](overview.md) 6.1、[database.md](database.md) 冒頭「ID の採番規則」）。
-- `DELETE /api/notification-targets` は、削除対象の `targetId` が `AllowList.targetId`（D列）から参照されている場合は `INVALID_INPUT` で拒否する（管理者の管理者判定と紐付くため、[overview.md](overview.md) 4.6）。
+- `DELETE /api/notification-targets` は、削除対象の `targetId` が `AllowList.targetId`（D列）から参照されている場合は `INVALID_INPUT` で拒否する（ユーザのアラート受信先紐付けが失われるため、[overview.md](overview.md) 4.6）。
 - ロック取得・解放のパラメータ（リトライ・タイムアウト・スタックロック対策）は 2.3 / [overview.md](overview.md) 6.1 と共通。

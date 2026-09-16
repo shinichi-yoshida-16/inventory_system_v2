@@ -38,6 +38,7 @@ export interface AllowListRow {
   passwordHash: string
   targetId: string
   retiredFlag: boolean
+  adminFlag: boolean
   updatedAt: string
 }
 
@@ -46,7 +47,7 @@ const TRANSACTION_RANGE = 'TransactionLog!A2:G'
 const TRANSACTION_APPEND_RANGE = 'TransactionLog!A:G'
 const NOTIFICATION_RANGE = 'NotificationTargets!A2:C'
 const NOTIFICATION_APPEND_RANGE = 'NotificationTargets!A:C'
-const ALLOWLIST_RANGE = 'AllowList!A2:F'
+const ALLOWLIST_RANGE = 'AllowList!A2:G'
 
 let sheetsClient: sheets_v4.Sheets | null = null
 
@@ -361,7 +362,8 @@ export async function getUsers(): Promise<AllowListRow[]> {
     passwordHash: String(row[2] ?? ''),
     targetId: String(row[3] ?? ''),
     retiredFlag: toBool(row[4]),
-    updatedAt: String(row[5] ?? ''),
+    adminFlag: toBool(row[5]),
+    updatedAt: String(row[6] ?? ''),
   }))
 }
 
@@ -398,7 +400,7 @@ export async function updateUserPassword(allowId: string, passwordHash: string, 
   })
   await sheets.spreadsheets.values.update({
     spreadsheetId: config.googleSpreadsheetId,
-    range: `AllowList!F${sheetRow}:F${sheetRow}`,
+    range: `AllowList!G${sheetRow}:G${sheetRow}`,
     valueInputOption: 'RAW',
     requestBody: { values: [[updatedAt]] },
   })

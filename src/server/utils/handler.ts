@@ -39,7 +39,7 @@ export async function requireAdmin(
 ): Promise<{ allowId: string; email: string }> {
   const auth = await requireSession(event)
   const row = await findUserByEmail(auth.email)
-  if (!row || !row.targetId) {
+  if (!row || !isAdminRow(row)) {
     throw new ApiError('PERMISSION_DENIED', '管理者権限が必要です')
   }
   return auth

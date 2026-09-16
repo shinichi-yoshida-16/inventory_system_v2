@@ -62,7 +62,7 @@
 | C | 更新年月日(updatedAt) | 日時 | ○ | |
 
 > 品目ごとの紐付けは行わず、登録済み全アドレスへ一律通知
-> `AllowList.targetId`（D列）が値を持つ行は、その `targetId` を持つ本シートの行と対応する（管理者＝アラート受信者）
+> `AllowList.targetId`（D列）が値を持つ行は、その `targetId` を持つ本シートの行と対応する（アラート受信者。管理者判定には用いない。管理者は `AllowList.adminFlag`（F列）で判定）
 
 ## 4. 許可リストシート（`AllowList`）
 
@@ -71,11 +71,12 @@
 | A | 許可ID(allowId) | 文字列 | ○ | 一意 |
 | B | 許可メールアドレス(email) | 文字列 | ○ | ログイン照合キー |
 | C | パスワード(passwordHash) | 文字列 | ○ | bcryptjsによる暗号化済み文字列（要件定義7.4、FR-01）。平文は保存しない（＝画面での平文表示は不可）。本人は `PUT /api/user/password`、管理者は `PUT /api/users/{allowId}/password` で再ハッシュ更新（FR-13、3-10）。初回登録は `npm run hash-password` で生成したハッシュを直接記入（要件3-1） |
-| D | 通知先ID(targetId) | 文字列 | 条件付 | 管理者は `NotificationTargets.targetId`（`TAR-NNN`）の値を設定、非管理者は空白。この値の有無で管理者判定を行う |
+| D | 通知先ID(targetId) | 文字列 | 条件付 | 管理者がアラートメールの受信も兼ねる場合に `NotificationTargets.targetId`（`TAR-NNN`）の値を設定。空白可。管理者判定には用いない（通知先への紐付け専用） |
 | E | 退職フラグ(retiredFlag) | 真偽値 | ○ | trueの場合ログイン拒否 |
-| F | 更新年月日(updatedAt) | 日時 | ○ | |
+| F | 管理者フラグ(adminFlag) | 真偽値 | ○ | trueの場合、管理者ユーザと判断 |
+| G | 更新年月日(updatedAt) | 日時 | ○ | |
 
-> 「管理者級の整備士」の判定は、D列（通知先ID）が空欄でないことで行う \
+> 「管理者級の整備士」の判定は、F列（管理者フラグ）で行う \
 > （要件定義2章「権限による操作はDBの直接編集」に対応。管理者はスプレッドシート直接編集権限を別途Google側の共有設定で付与する） \
 
 
@@ -84,7 +85,7 @@
 ```mermaid
 erDiagram
     InventoryMaster ||--o{ TransactionLog : "品目IDで紐付け"
-    AllowList ||--o| NotificationTargets : "通知先IDで紐付け（管理者のみ）"
+    AllowList ||--o| NotificationTargets : "通知先IDで紐付け（任意）"
     InventoryMaster {
         string itemId PK
         string gtin
@@ -116,6 +117,7 @@ erDiagram
         string passwordHash
         string targetId FK
         boolean retiredFlag
+        boolean adminFlag
         datetime updatedAt
     }
 ```

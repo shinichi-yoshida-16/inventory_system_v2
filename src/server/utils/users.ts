@@ -13,10 +13,10 @@ export interface UserSummary {
 const BCRYPT_ROUNDS = 10
 
 /**
- * AllowList行から管理者判定を行う（D列targetIdの有無、database.md 4章）
+ * AllowList行から管理者判定を行う（F列adminFlag、database.md 4章）
  */
-export function isAdminRow(row: { targetId: string }): boolean {
-  return row.targetId.trim() !== ''
+export function isAdminRow(row: { adminFlag: boolean }): boolean {
+  return row.adminFlag
 }
 
 /**
