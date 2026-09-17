@@ -44,7 +44,6 @@ export interface AllowListRow {
 
 const INVENTORY_RANGE = 'InventoryMaster!A2:I'
 const TRANSACTION_RANGE = 'TransactionLog!A2:G'
-const TRANSACTION_APPEND_RANGE = 'TransactionLog!A:G'
 const NOTIFICATION_RANGE = 'NotificationTargets!A2:C'
 const ALLOWLIST_RANGE = 'AllowList!A2:G'
 
@@ -149,14 +148,25 @@ export async function getMaxItemIdSeq(): Promise<number> {
 }
 
 /**
- * 在庫マスタへ新規行を追加する（呼び出し元がロック区間内で使うこと。キャッシュを無効化する）
+ * 在庫マスタへ新規行を追加する（values.appendの自動テーブル検出は使わず、
+ * 実データの直後の行を自前で計算して書き込む。appendNotificationTargetと同じ対処。
+ * 呼び出し元がロック区間内で使うこと。キャッシュを無効化する）
  */
 export async function appendInventoryRow(item: InventoryRow): Promise<void> {
   const sheets = await getSheetsClient()
   const config = useRuntimeConfig()
-  await sheets.spreadsheets.values.append({
+  const res = await sheets.spreadsheets.values.get({
     spreadsheetId: config.googleSpreadsheetId,
-    range: 'InventoryMaster!A:I',
+    range: INVENTORY_RANGE,
+  })
+  const rows = res.data.values || []
+  const emptyIndex = rows.findIndex((row) => !row[0])
+  const dataIndex = emptyIndex === -1 ? rows.length : emptyIndex
+  const sheetRow = dataIndex + 2 // A2始まり(ヘッダーがrow1) → 実際のシート行番号
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: config.googleSpreadsheetId,
+    range: `InventoryMaster!A${sheetRow}:I${sheetRow}`,
     valueInputOption: 'RAW',
     requestBody: { values: [inventoryToRow(item)] },
   })
@@ -248,14 +258,25 @@ export async function findTransactionByOperationId(operationId: string): Promise
 }
 
 /**
- * TransactionLogへ1行追記する（追記専用。呼び出し元がロック区間内で使うこと）
+ * TransactionLogへ1行追記する（追記専用。values.appendの自動テーブル検出は使わず、
+ * 実データの直後の行を自前で計算して書き込む。appendNotificationTargetと同じ対処。
+ * 呼び出し元がロック区間内で使うこと）
  */
 export async function appendTransaction(tx: TransactionRow): Promise<void> {
   const sheets = await getSheetsClient()
   const config = useRuntimeConfig()
-  await sheets.spreadsheets.values.append({
+  const res = await sheets.spreadsheets.values.get({
     spreadsheetId: config.googleSpreadsheetId,
-    range: TRANSACTION_APPEND_RANGE,
+    range: TRANSACTION_RANGE,
+  })
+  const rows = res.data.values || []
+  const emptyIndex = rows.findIndex((row) => !row[0])
+  const dataIndex = emptyIndex === -1 ? rows.length : emptyIndex
+  const sheetRow = dataIndex + 2 // A2始まり(ヘッダーがrow1) → 実際のシート行番号
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: config.googleSpreadsheetId,
+    range: `TransactionLog!A${sheetRow}:G${sheetRow}`,
     valueInputOption: 'RAW',
     requestBody: {
       values: [[tx.transactionId, tx.transactionAt, tx.itemId, tx.type, tx.quantity, tx.userEmail, tx.operationId]],
