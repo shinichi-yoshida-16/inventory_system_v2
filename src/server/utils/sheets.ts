@@ -17,7 +17,7 @@ export interface InventoryRow {
 }
 
 export interface TransactionRow {
-  transactionId: number
+  transactionId: string
   transactionAt: string
   itemId: string
   type: 'IN' | 'OUT'
@@ -202,7 +202,7 @@ export async function batchUpdateInventoryRows(updates: { index: number; item: I
 // --- 入出庫履歴(TransactionLog) ---
 
 /**
- * TransactionLogのA列最大値+1（transactionIdの採番。呼び出し元がロック区間内で使うこと）
+ * TRN- の最大連番を取得する（transactionIdの採番。呼び出し元がロック区間内で使うこと）
  */
 export async function getMaxTransactionId(): Promise<number> {
   const sheets = await getSheetsClient()
@@ -214,8 +214,8 @@ export async function getMaxTransactionId(): Promise<number> {
   const values = res.data.values || []
   let max = 0
   for (const row of values) {
-    const n = Number(row[0])
-    if (Number.isFinite(n)) max = Math.max(max, n)
+    const m = /^TRN-(\d{6})$/.exec(String(row[0] ?? ''))
+    if (m) max = Math.max(max, Number(m[1]))
   }
   return max
 }
@@ -234,7 +234,7 @@ export async function findTransactionByOperationId(operationId: string): Promise
   for (const row of rows) {
     if (String(row[6] ?? '') === operationId) {
       return {
-        transactionId: toNum(row[0]),
+        transactionId: String(row[0] ?? ''),
         transactionAt: String(row[1] ?? ''),
         itemId: String(row[2] ?? ''),
         type: (row[3] === 'OUT' ? 'OUT' : 'IN'),

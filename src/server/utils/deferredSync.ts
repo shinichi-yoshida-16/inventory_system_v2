@@ -81,7 +81,7 @@ async function applyOne(op: PendingOperation): Promise<void> {
 
     if (!alreadyApplied) {
       await appendTransaction({
-        transactionId: (await getMaxTransactionId()) + 1,
+        transactionId: formatTransactionId((await getMaxTransactionId()) + 1),
         transactionAt: op.occurredAt,
         itemId: op.itemId,
         type: op.type,

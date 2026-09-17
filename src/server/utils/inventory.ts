@@ -10,6 +10,10 @@ export function formatItemId(seq: number): string {
   return `ITM-${String(seq).padStart(6, '0')}`
 }
 
+export function formatTransactionId(seq: number): string {
+  return `TRN-${String(seq).padStart(6, '0')}`
+}
+
 export function formatTargetId(seq: number): string {
   return `TAR-${String(seq).padStart(3, '0')}`
 }
@@ -86,7 +90,7 @@ async function registerAndStockIn(params: ScanParams): Promise<ScanResult> {
 
     try {
       await appendTransaction({
-        transactionId: (await getMaxTransactionId()) + 1,
+        transactionId: formatTransactionId((await getMaxTransactionId()) + 1),
         transactionAt: now,
         itemId,
         type: 'IN',
@@ -152,7 +156,7 @@ async function updateExistingStock(params: ScanParams): Promise<ScanResult> {
 
     try {
       await appendTransaction({
-        transactionId: (await getMaxTransactionId()) + 1,
+        transactionId: formatTransactionId((await getMaxTransactionId()) + 1),
         transactionAt: occurredAt,
         itemId,
         type: params.type,
