@@ -46,4 +46,15 @@ describe('GET /api/inventory/{itemId}', () => {
     expect(event.node.res.statusCode).toBe(404)
     expect(result).toMatchObject({ status: 'ERROR', code: 'ITEM_NOT_FOUND' })
   })
+
+  it('itemId/GTINどちらの形式にも合わない値はINVALID_INPUT(400)', async () => {
+    vi.stubGlobal('findInventoryRowIndex', vi.fn())
+    const handler = await loadHandler()
+
+    const event = createFakeEvent({ params: { itemId: 'not-a-valid-code' } })
+    const result = await handler(event)
+
+    expect(event.node.res.statusCode).toBe(400)
+    expect(result).toMatchObject({ status: 'ERROR', code: 'INVALID_INPUT' })
+  })
 })
