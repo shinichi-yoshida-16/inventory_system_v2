@@ -16,7 +16,7 @@
   |---|---|---|
   | `itemId`（全品目共通） | `ITM-` ＋ 6桁ゼロ埋め（`ITM-000001`〜`ITM-999999`） | A列を読み、`^ITM-(\d{6})$` に一致する行の最大値 +1。登録経路（D-03 バーコード / D-04 自社発行）を問わず同じ規則 |
   | `gtin`（メーカー品のみ、任意項目） | GTIN-14（14桁数字） | 読み取りコードから正規化（採番しない。[overview.md](overview.md) 4.5）。`itemId` とは別項目 |
-  | `transactionId` | 数値の連番（1 から。桁揃えなし） | A列の最大値 +1 |
+  | `transactionId` | `TRN-` ＋ 6桁ゼロ埋め（`TRN-000001`〜`TRN-999999`） | A列を読み、`^TRN-(\d{6})$` に一致する行の最大値 +1 |
   | `targetId` | `TAR-` ＋ 3桁ゼロ埋め（`TAR-001`〜`TAR-999`） | `NotificationTargets` A列を読み、`^TAR-(\d{3})$` の最大値 +1 |
   | `allowId` | 任意（初回登録時に人手で採番。例 `U001`） | スプレッドシート直接編集（要件3-1） |
   | `operationId` | UUID v4 | ランダム生成 |
@@ -42,7 +42,7 @@
 
 | 列 | 項目名(フィールド名) | 型 | 必須 | 備考 |
 |---|---|---|---|---|
-| A | 取引ID(transactionId) | 数値 | ○ | 一意（PK）。`TRN-`＋6桁ゼロ埋め（`TRN-000123`）。ロジック層で採番する（A列の最大値+1。当シートのA列は取引IDのみ・追記専用なので最大値＝最新。ロック区間内で追記するため衝突しない。[sequence.md](sequence.md) 2.1） |
+| A | 取引ID(transactionId) | 文字列 | ○ | 一意（PK）。`TRN-`＋6桁ゼロ埋め（`TRN-000123`）。ロジック層で採番する（A列の最大値+1。当シートのA列は取引IDのみ・追記専用なので最大値＝最新。ロック区間内で追記するため衝突しない。[sequence.md](sequence.md) 2.1） |
 | B | 入出庫日時(transactionAt) | 日時 | ○ | サーバー側で付与（UTC ISO8601）。通常はロジック層での処理時刻。時差更新（[sequence.md](sequence.md) 2.6）で後追い登録する場合は退避時の発生時刻（`occurredAt`）を用いる |
 | C | 品目ID(itemId) | 文字列 | ○ | 在庫マスタと紐付け |
 | D | 種別(type) | 文字列 | ○ | `IN` または `OUT` |
@@ -98,7 +98,7 @@ erDiagram
         datetime updatedAt
     }
     TransactionLog {
-        number transactionId PK
+        string transactionId PK
         datetime transactionAt
         string itemId FK
         string type
