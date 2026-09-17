@@ -7,6 +7,9 @@
 dist
 *.tsbuildinfo
 
+# Test coverage reports
+coverage
+
 # セッション実体（overview.md 6.3。再デプロイで消失＝全員再ログイン許容）
 /data
 
